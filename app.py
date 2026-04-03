@@ -1,15 +1,14 @@
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
 import streamlit as st
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
 from PIL import Image
 import io
-import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from datetime import datetime
@@ -20,15 +19,26 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
+
+# Import tf_keras first (Keras 2 compatible), fall back to tf.keras
+try:
+    import tf_keras as keras_compat
+    from tf_keras.models import load_model as keras_load_model
+    import tensorflow as tf
+    _preprocess_input = tf.keras.applications.efficientnet.preprocess_input
+except ImportError:
+    import tensorflow as tf
+    import tf_keras as keras_compat
+    from tensorflow.keras.models import load_model as keras_load_model
+    _preprocess_input = tf.keras.applications.efficientnet.preprocess_input
+
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
 MODEL1_PATH = "model.h5"
 MODEL2_PATH = "best_efficientnetb3.keras"
-MODEL1_URL = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-MODEL2_URL = "https://drive.google.com/uc?id=11XxYgPmxZ_eAFWTGBZLf_7iDZfQazyX2"
+MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
+MODEL2_URL  = "https://drive.google.com/uc?id=11XxYgPmxZ_eAFWTGBZLf_7iDZfQazyX2"
 
 def download_models():
     if not os.path.exists(MODEL1_PATH):
@@ -74,7 +84,6 @@ html, body, [class*="css"] {
 
 .stApp { background: var(--bg); }
 
-/* Header */
 .header-block {
     background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
     border: 1px solid rgba(0, 212, 255, 0.2);
@@ -109,7 +118,6 @@ html, body, [class*="css"] {
     font-weight: 300;
 }
 
-/* Cards */
 .card {
     background: var(--surface);
     border: 1px solid rgba(255,255,255,0.07);
@@ -118,7 +126,6 @@ html, body, [class*="css"] {
     margin-bottom: 1.2rem;
 }
 
-/* Disease badge */
 .disease-badge {
     display: inline-block;
     background: linear-gradient(135deg, #00d4ff22, #7c3aed22);
@@ -131,7 +138,6 @@ html, body, [class*="css"] {
     margin: 0.5rem 0 1rem;
 }
 
-/* Confidence bar */
 .conf-bar-bg {
     background: #1e293b;
     border-radius: 100px;
@@ -147,7 +153,6 @@ html, body, [class*="css"] {
     transition: width 0.8s ease;
 }
 
-/* Report lines */
 .report-line {
     display: flex;
     gap: 0.8rem;
@@ -171,20 +176,17 @@ html, body, [class*="css"] {
     line-height: 1.5;
 }
 
-/* Sidebar */
 section[data-testid="stSidebar"] {
     background: var(--surface) !important;
     border-right: 1px solid rgba(255,255,255,0.06);
 }
 
-/* Upload area */
 .stFileUploader > div {
     background: var(--surface2) !important;
     border: 2px dashed rgba(0,212,255,0.3) !important;
     border-radius: 12px !important;
 }
 
-/* Buttons */
 .stButton > button {
     background: linear-gradient(135deg, #00d4ff, #7c3aed) !important;
     color: white !important;
@@ -203,10 +205,7 @@ section[data-testid="stSidebar"] {
     box-shadow: 0 4px 20px rgba(0,212,255,0.3) !important;
 }
 
-/* Spinner */
 .stSpinner > div { border-top-color: var(--accent) !important; }
-
-/* Hide streamlit branding */
 #MainMenu, footer, header { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -228,13 +227,13 @@ IMG_SIZE = (300, 300)
 LAST_CONV_LAYER = "top_conv"
 
 DISEASE_INFO = {
-    'Diabetic Retinopathy': ('⚠️ High', '#ef4444'),
-    'Disc Edema':           ('⚠️ High', '#ef4444'),
-    'Healthy':              ('✅ Normal', '#10b981'),
+    'Diabetic Retinopathy': ('⚠️ High',     '#ef4444'),
+    'Disc Edema':           ('⚠️ High',     '#ef4444'),
+    'Healthy':              ('✅ Normal',   '#10b981'),
     'Myopia':               ('🟡 Moderate', '#f59e0b'),
     'Pterygium':            ('🟡 Moderate', '#f59e0b'),
     'Retinal Detachment':   ('🚨 Critical', '#dc2626'),
-    'Retinitis Pigmentosa': ('⚠️ High', '#ef4444'),
+    'Retinitis Pigmentosa': ('⚠️ High',     '#ef4444'),
 }
 
 # ─────────────────────────────────────────────
@@ -242,47 +241,42 @@ DISEASE_INFO = {
 # ─────────────────────────────────────────────
 @st.cache_resource
 def load_vision_model():
-    # Download models from Google Drive if not present
     with st.spinner("⬇️ Downloading models from Google Drive (first run only)..."):
         download_models()
 
-    # Support all naming conventions (prefer .keras, fallback to .h5)
-    for model_path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
-        if os.path.exists(model_path):
+    # Pick the first file that exists
+    model_path = None
+    for path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
+        if os.path.exists(path):
+            model_path = path
             break
-    else:
+
+    if model_path is None:
         st.error("❌ Model file not found. Could not download from Google Drive.")
         return None
 
-    # Try multiple loading strategies for Keras 2 / Keras 3 / TF compatibility
-    # Strategy 1: standard load_model
-    try:
-        return load_model(model_path)
-    except Exception:
-        pass
-
-    # Strategy 2: force legacy h5 format via tf.keras directly
-    try:
-        import tensorflow as tf
-        return tf.keras.models.load_model(model_path)
-    except Exception:
-        pass
-
-    # Strategy 3: compile=False (skips optimizer state issues)
-    try:
-        return load_model(model_path, compile=False)
-    except Exception:
-        pass
-
-    # Strategy 4: use tf_keras (standalone Keras 2 package) if installed
+    # Strategy 1: tf_keras (Keras 2 — most compatible with saved .h5 / .keras files)
     try:
         import tf_keras
         return tf_keras.models.load_model(model_path, compile=False)
-    except Exception:
+    except Exception as e1:
+        pass
+
+    # Strategy 2: tensorflow.keras with compile=False
+    try:
+        return tf.keras.models.load_model(model_path, compile=False)
+    except Exception as e2:
+        pass
+
+    # Strategy 3: standard keras_load_model
+    try:
+        return keras_load_model(model_path, compile=False)
+    except Exception as e3:
         pass
 
     st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
     return None
+
 
 @st.cache_resource
 def load_llm():
@@ -291,7 +285,7 @@ def load_llm():
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         llm = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
             device_map="auto"
         )
         return tokenizer, llm
@@ -306,7 +300,7 @@ def preprocess_image(pil_img):
     img = pil_img.resize(IMG_SIZE)
     img_array = np.array(img.convert("RGB")).astype(np.float32)
     img_array = np.expand_dims(img_array, axis=0)
-    img_array = tf.keras.applications.efficientnet.preprocess_input(img_array)
+    img_array = _preprocess_input(img_array)
     return img_array
 
 def predict_disease(img_array, model):
@@ -358,8 +352,8 @@ def build_gradcam_figure(original_pil, heatmap):
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     fig.patch.set_facecolor('#111827')
     titles = ["Original", "Grad-CAM++ Heatmap", "Overlay"]
-    imgs = [original, heatmap_resized, overlay]
-    cmaps = [None, 'jet', None]
+    imgs   = [original, heatmap_resized, overlay]
+    cmaps  = [None, 'jet', None]
     for ax, title, img, cmap in zip(axes, titles, imgs, cmaps):
         ax.imshow(img, cmap=cmap)
         ax.set_title(title, color='#94a3b8', fontsize=10, pad=8)
@@ -479,7 +473,6 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
         bottomMargin=0.75 * inch,
     )
 
-    # ── Colour palette ──────────────────────────────────────────────────────
     DARK      = colors.HexColor("#0a0e1a")
     SURFACE   = colors.HexColor("#111827")
     ACCENT    = colors.HexColor("#00d4ff")
@@ -489,63 +482,41 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
     _, sev_hex = DISEASE_INFO.get(disease, ('Unknown', '#94a3b8'))
     SEV_COLOR = colors.HexColor(sev_hex)
 
-    # ── Styles ──────────────────────────────────────────────────────────────
     base = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
-        "ReportTitle",
-        parent=base["Normal"],
-        fontSize=22,
-        textColor=ACCENT,
-        alignment=TA_CENTER,
-        spaceAfter=4,
-        fontName="Helvetica-Bold",
+        "ReportTitle", parent=base["Normal"],
+        fontSize=22, textColor=ACCENT,
+        alignment=TA_CENTER, spaceAfter=4, fontName="Helvetica-Bold",
     )
     subtitle_style = ParagraphStyle(
-        "ReportSubtitle",
-        parent=base["Normal"],
-        fontSize=9,
-        textColor=MUTED,
-        alignment=TA_CENTER,
-        spaceAfter=2,
+        "ReportSubtitle", parent=base["Normal"],
+        fontSize=9, textColor=MUTED,
+        alignment=TA_CENTER, spaceAfter=2,
     )
     section_style = ParagraphStyle(
-        "Section",
-        parent=base["Normal"],
-        fontSize=11,
-        textColor=ACCENT,
-        fontName="Helvetica-Bold",
-        spaceBefore=14,
-        spaceAfter=6,
+        "Section", parent=base["Normal"],
+        fontSize=11, textColor=ACCENT,
+        fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=6,
     )
     body_style = ParagraphStyle(
-        "Body",
-        parent=base["Normal"],
-        fontSize=10,
-        textColor=TEXT,
-        leading=15,
-        spaceAfter=4,
+        "Body", parent=base["Normal"],
+        fontSize=10, textColor=TEXT, leading=15, spaceAfter=4,
     )
     small_style = ParagraphStyle(
-        "Small",
-        parent=base["Normal"],
-        fontSize=8,
-        textColor=MUTED,
-        alignment=TA_CENTER,
-        spaceBefore=20,
+        "Small", parent=base["Normal"],
+        fontSize=8, textColor=MUTED,
+        alignment=TA_CENTER, spaceBefore=20,
     )
 
     story = []
 
-    # ── Header ──────────────────────────────────────────────────────────────
     story.append(Paragraph("👁  Eye Disease AI Diagnostics", title_style))
     story.append(Paragraph("EfficientNetB3 · Grad-CAM++ · AI Medical Report", subtitle_style))
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}", subtitle_style))
     story.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
 
-    # ── Diagnosis Summary ────────────────────────────────────────────────────
     story.append(Paragraph("Diagnosis Summary", section_style))
-
     diag_data = [
         ["Predicted Condition", disease],
         ["Confidence",          f"{confidence:.1%}"],
@@ -553,28 +524,26 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
     ]
     diag_table = Table(diag_data, colWidths=[2.2 * inch, 4.3 * inch])
     diag_table.setStyle(TableStyle([
-        ("BACKGROUND",  (0, 0), (0, -1), SURFACE),
-        ("BACKGROUND",  (1, 0), (1, -1), DARK),
-        ("TEXTCOLOR",   (0, 0), (0, -1), MUTED),
-        ("TEXTCOLOR",   (1, 0), (1, 0),  ACCENT),   # disease name
-        ("TEXTCOLOR",   (1, 1), (1, 1),  ACCENT2),  # confidence
-        ("TEXTCOLOR",   (1, 2), (1, 2),  SEV_COLOR),# severity
-        ("FONTNAME",    (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE",    (0, 0), (-1, -1), 10),
-        ("FONTNAME",    (1, 0), (1, 0),  "Helvetica-Bold"),
-        ("PADDING",     (0, 0), (-1, -1), 8),
-        ("GRID",        (0, 0), (-1, -1), 0.5, colors.HexColor("#1c2536")),
+        ("BACKGROUND",     (0, 0), (0, -1), SURFACE),
+        ("BACKGROUND",     (1, 0), (1, -1), DARK),
+        ("TEXTCOLOR",      (0, 0), (0, -1), MUTED),
+        ("TEXTCOLOR",      (1, 0), (1, 0),  ACCENT),
+        ("TEXTCOLOR",      (1, 1), (1, 1),  ACCENT2),
+        ("TEXTCOLOR",      (1, 2), (1, 2),  SEV_COLOR),
+        ("FONTNAME",       (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE",       (0, 0), (-1, -1), 10),
+        ("FONTNAME",       (1, 0), (1, 0),  "Helvetica-Bold"),
+        ("PADDING",        (0, 0), (-1, -1), 8),
+        ("GRID",           (0, 0), (-1, -1), 0.5, colors.HexColor("#1c2536")),
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [SURFACE, DARK]),
     ]))
     story.append(diag_table)
 
-    # ── AI Medical Report ────────────────────────────────────────────────────
     story.append(Paragraph("AI Medical Report", section_style))
     for i, line in enumerate(report_lines, 1):
         text = line.lstrip("0123456789. ").strip()
         story.append(Paragraph(f"<b>{i}.</b>  {text}", body_style))
 
-    # ── All Class Probabilities ──────────────────────────────────────────────
     story.append(Paragraph("Class Probabilities", section_style))
     sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
     prob_data = [["Condition", "Probability"]]
@@ -583,22 +552,20 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
 
     prob_table = Table(prob_data, colWidths=[4 * inch, 2.5 * inch])
     prob_table.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0),  ACCENT2),
-        ("TEXTCOLOR",    (0, 0), (-1, 0),  colors.white),
-        ("FONTNAME",     (0, 0), (-1, 0),  "Helvetica-Bold"),
-        ("BACKGROUND",   (0, 1), (-1, -1), DARK),
-        ("ROWBACKGROUNDS",(0, 1),(-1, -1), [DARK, SURFACE]),
-        ("TEXTCOLOR",    (0, 1), (-1, -1), TEXT),
-        ("FONTSIZE",     (0, 0), (-1, -1), 9),
-        ("PADDING",      (0, 0), (-1, -1), 7),
-        ("GRID",         (0, 0), (-1, -1), 0.4, colors.HexColor("#1c2536")),
-        # Highlight the predicted class
-        *[("TEXTCOLOR",  (0, i + 1), (-1, i + 1), ACCENT)
+        ("BACKGROUND",    (0, 0),  (-1, 0),  ACCENT2),
+        ("TEXTCOLOR",     (0, 0),  (-1, 0),  colors.white),
+        ("FONTNAME",      (0, 0),  (-1, 0),  "Helvetica-Bold"),
+        ("BACKGROUND",    (0, 1),  (-1, -1), DARK),
+        ("ROWBACKGROUNDS",(0, 1),  (-1, -1), [DARK, SURFACE]),
+        ("TEXTCOLOR",     (0, 1),  (-1, -1), TEXT),
+        ("FONTSIZE",      (0, 0),  (-1, -1), 9),
+        ("PADDING",       (0, 0),  (-1, -1), 7),
+        ("GRID",          (0, 0),  (-1, -1), 0.4, colors.HexColor("#1c2536")),
+        *[("TEXTCOLOR",   (0, i + 1), (-1, i + 1), ACCENT)
           for i, (cls, _) in enumerate(sorted_probs) if cls == disease],
     ]))
     story.append(prob_table)
 
-    # ── Disclaimer ───────────────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5, color=MUTED, spaceBefore=20))
     story.append(Paragraph(
         "⚠  This report is generated by an AI model for informational purposes only. "
@@ -611,7 +578,6 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
     buf.seek(0)
     return buf.read()
 
-
 # ─────────────────────────────────────────────
 # UI
 # ─────────────────────────────────────────────
@@ -622,13 +588,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar
 with st.sidebar:
     st.markdown("### ⚙️ Settings")
-    show_gradcam = st.toggle("Show Grad-CAM++ Heatmap", value=True)
+    show_gradcam   = st.toggle("Show Grad-CAM++ Heatmap", value=True)
     show_all_probs = st.toggle("Show All Class Probabilities", value=False)
-    use_llm = st.toggle("Use Phi-3 LLM for Report", value=False,
-                        help="Slower but more dynamic explanations. Requires GPU for best performance.")
+    use_llm        = st.toggle("Use Phi-3 LLM for Report", value=False,
+                               help="Slower but more dynamic explanations. Requires GPU for best performance.")
 
     st.markdown("---")
     st.markdown("**📋 Supported Conditions**")
@@ -638,9 +603,8 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("Model: EfficientNetB3 · Input: 300×300px")
-    st.caption("Place `best_efficientnetb3.h5` in the app directory.")
 
-# Load models
+# Load vision model
 vision_model = load_vision_model()
 
 tokenizer, llm = None, None
@@ -648,7 +612,6 @@ if use_llm:
     with st.spinner("Loading Phi-3 LLM..."):
         tokenizer, llm = load_llm()
 
-# Main area
 col1, col2 = st.columns([1, 1.3], gap="large")
 
 with col1:
@@ -670,7 +633,7 @@ with col1:
 with col2:
     if uploaded_file and analyze_btn:
         if vision_model is None:
-            st.error("Vision model not loaded. Please check `best_efficientnetb3.h5`.")
+            st.error("Vision model not loaded. Please check `best_efficientnetb3.keras` or `model.h5`.")
         else:
             with st.spinner("Running EfficientNetB3 inference..."):
                 img_array = preprocess_image(pil_img)
@@ -712,24 +675,20 @@ with col2:
 </div>
 """, unsafe_allow_html=True)
 
-            # Medical Report
             st.markdown("#### 📋 AI Medical Report")
             with st.spinner("Generating medical explanation..."):
                 report_lines = llm_explain(disease, confidence, tokenizer, llm)
 
             report_html = ""
             for i, line in enumerate(report_lines, 1):
-                # Strip leading number if present
                 text = line.lstrip("0123456789. ").strip()
                 report_html += f"""
 <div class="report-line">
     <span class="line-num">{i}.</span>
     <span class="line-text">{text}</span>
 </div>"""
-
             st.markdown(f'<div class="card">{report_html}</div>', unsafe_allow_html=True)
 
-            # PDF Download
             st.markdown("#### 📥 Download Report")
             pdf_bytes = generate_pdf_report(
                 disease, confidence, severity_label, report_lines, all_probs, pil_img
@@ -742,7 +701,6 @@ with col2:
                 use_container_width=True,
             )
 
-            # Grad-CAM
             if show_gradcam:
                 st.markdown("#### 🔥 Grad-CAM++ Visualization")
                 with st.spinner("Computing saliency map..."):
