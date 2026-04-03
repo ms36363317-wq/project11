@@ -9,3 +9,4 @@ streamlit>=1.35
 transformers>=4.40,<5.0
 torch>=2.2
 accelerate>=0.30
+reportlab
