@@ -15,33 +15,25 @@ import gdown
 # TensorFlow (نسخة واحدة بس)
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-
+from transformers import AutoTokenizer, AutoModelForCausalLM
 # EfficientNet preprocessing
 _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 
-# (اختياري لو هتستخدم LLM)
-from transformers import AutoTokenizer, AutoModelForCausalLM
-
-# PDF
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
 MODEL1_PATH = "model.h5"
 MODEL2_PATH = "best_efficientnetb3.h5"
 MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-MODEL2_URL  = "https://drive.google.com/uc?id=11XxYgPmxZ_eAFWTGBZLf_7iDZfQazyX2"
+MODEL2_URL  = "https://drive.google.com/uc?id=1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
 
 def download_models():
-    if not os.path.exists(MODEL1_PATH):
-        gdown.download(MODEL1_URL, MODEL1_PATH, quiet=False)
-    if not os.path.exists(MODEL2_PATH):
-        gdown.download(MODEL2_URL, MODEL2_PATH, quiet=False)
+    for url, path in [
+        (MODEL1_URL, MODEL1_PATH),
+        (MODEL2_URL, MODEL2_PATH)
+    ]:
+        if not os.path.exists(path):
+            gdown.download(url, path, quiet=False, fuzzy=True)
 
 # ─────────────────────────────────────────────
 # Page Config
@@ -244,7 +236,7 @@ def load_vision_model():
 
     # تحديد المسار الصحيح
     model_path = None
-    for path in [MODEL2_PATH, MODEL1_PATH]:
+    for path in [MODEL1_PATH, MODEL2_PATH]:
         if os.path.exists(path):
             model_path = path
             break
