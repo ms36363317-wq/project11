@@ -241,9 +241,11 @@ DISEASE_INFO = {
 # ─────────────────────────────────────────────
 @st.cache_resource
 def load_vision_model():
+
     with st.spinner("⬇️ Downloading models from Google Drive (first run only)..."):
         download_models()
 
+    # تحديد المسار الصحيح
     model_path = None
     for path in [MODEL2_PATH, MODEL1_PATH]:
         if os.path.exists(path):
@@ -254,25 +256,25 @@ def load_vision_model():
         st.error("❌ Model file not found. Could not download from Google Drive.")
         return None
 
-    # Strategy 1: tf_keras — Keras 2, fully compatible with TF 2.15
-    try:
-        import tf_keras
-        return tf_keras.models.load_model(model_path, compile=False)
-    except Exception:
-        pass
+    st.info(f"📦 Loading model from: {model_path}")
 
-    # Strategy 2: tf.keras with legacy env var already set at module top
+    # 🔥 Strategy 1 (الأهم) → tf.keras
     try:
-        return tf.keras.models.load_model(model_path, compile=False)
-    except Exception:
-        pass
+        model = tf.keras.models.load_model(model_path, compile=False)
+        st.success("✅ Model loaded باستخدام tf.keras")
+        return model
+    except Exception as e:
+        st.warning(f"⚠️ tf.keras failed: {e}")
 
-    # Strategy 3: standard load_model imported at top
+    # 🔥 Strategy 2 → load_model المباشر
     try:
-        return load_model(model_path, compile=False)
-    except Exception:
-        pass
+        model = load_model(model_path, compile=False)
+        st.success("✅ Model loaded باستخدام load_model")
+        return model
+    except Exception as e:
+        st.warning(f"⚠️ load_model failed: {e}")
 
+    # ❌ لو كله فشل
     st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
     return None
 
