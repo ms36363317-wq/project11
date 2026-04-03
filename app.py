@@ -20,17 +20,17 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-# Import tf_keras first (Keras 2 compatible), fall back to tf.keras
+# Import tf_keras first (Keras 2 compatible with TF 2.15)
 try:
-    import tf_keras as keras_compat
-    from tf_keras.models import load_model as keras_load_model
+    import tf_keras as keras_lib
+    from tf_keras.models import load_model
     import tensorflow as tf
-    _preprocess_input = tf.keras.applications.efficientnet.preprocess_input
+    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 except ImportError:
     import tensorflow as tf
-    import tf_keras as keras_compat
-    from tensorflow.keras.models import load_model as keras_load_model
-    _preprocess_input = tf.keras.applications.efficientnet.preprocess_input
+    from tensorflow.keras.models import load_model
+    keras_lib = tf.keras
+    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 
 # ─────────────────────────────────────────────
 # Model Paths & Download
@@ -227,13 +227,13 @@ IMG_SIZE = (300, 300)
 LAST_CONV_LAYER = "top_conv"
 
 DISEASE_INFO = {
-    'Diabetic Retinopathy': ('⚠️ High',     '#ef4444'),
-    'Disc Edema':           ('⚠️ High',     '#ef4444'),
-    'Healthy':              ('✅ Normal',   '#10b981'),
-    'Myopia':               ('🟡 Moderate', '#f59e0b'),
-    'Pterygium':            ('🟡 Moderate', '#f59e0b'),
-    'Retinal Detachment':   ('🚨 Critical', '#dc2626'),
-    'Retinitis Pigmentosa': ('⚠️ High',     '#ef4444'),
+    'Diabetic Retinopathy': ('⚠️ High',      '#ef4444'),
+    'Disc Edema':           ('⚠️ High',      '#ef4444'),
+    'Healthy':              ('✅ Normal',     '#10b981'),
+    'Myopia':               ('🟡 Moderate',  '#f59e0b'),
+    'Pterygium':            ('🟡 Moderate',  '#f59e0b'),
+    'Retinal Detachment':   ('🚨 Critical',  '#dc2626'),
+    'Retinitis Pigmentosa': ('⚠️ High',      '#ef4444'),
 }
 
 # ─────────────────────────────────────────────
@@ -244,7 +244,6 @@ def load_vision_model():
     with st.spinner("⬇️ Downloading models from Google Drive (first run only)..."):
         download_models()
 
-    # Pick the first file that exists
     model_path = None
     for path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
         if os.path.exists(path):
@@ -255,23 +254,23 @@ def load_vision_model():
         st.error("❌ Model file not found. Could not download from Google Drive.")
         return None
 
-    # Strategy 1: tf_keras (Keras 2 — most compatible with saved .h5 / .keras files)
+    # Strategy 1: tf_keras — Keras 2, fully compatible with TF 2.15
     try:
         import tf_keras
         return tf_keras.models.load_model(model_path, compile=False)
-    except Exception as e1:
+    except Exception:
         pass
 
-    # Strategy 2: tensorflow.keras with compile=False
+    # Strategy 2: tf.keras with legacy env var already set at module top
     try:
         return tf.keras.models.load_model(model_path, compile=False)
-    except Exception as e2:
+    except Exception:
         pass
 
-    # Strategy 3: standard keras_load_model
+    # Strategy 3: standard load_model imported at top
     try:
-        return keras_load_model(model_path, compile=False)
-    except Exception as e3:
+        return load_model(model_path, compile=False)
+    except Exception:
         pass
 
     st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
@@ -300,7 +299,7 @@ def preprocess_image(pil_img):
     img = pil_img.resize(IMG_SIZE)
     img_array = np.array(img.convert("RGB")).astype(np.float32)
     img_array = np.expand_dims(img_array, axis=0)
-    img_array = _preprocess_input(img_array)
+    img_array = _PREPROCESS(img_array)
     return img_array
 
 def predict_disease(img_array, model):
@@ -486,18 +485,17 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
 
     title_style = ParagraphStyle(
         "ReportTitle", parent=base["Normal"],
-        fontSize=22, textColor=ACCENT,
-        alignment=TA_CENTER, spaceAfter=4, fontName="Helvetica-Bold",
+        fontSize=22, textColor=ACCENT, alignment=TA_CENTER,
+        spaceAfter=4, fontName="Helvetica-Bold",
     )
     subtitle_style = ParagraphStyle(
         "ReportSubtitle", parent=base["Normal"],
-        fontSize=9, textColor=MUTED,
-        alignment=TA_CENTER, spaceAfter=2,
+        fontSize=9, textColor=MUTED, alignment=TA_CENTER, spaceAfter=2,
     )
     section_style = ParagraphStyle(
         "Section", parent=base["Normal"],
-        fontSize=11, textColor=ACCENT,
-        fontName="Helvetica-Bold", spaceBefore=14, spaceAfter=6,
+        fontSize=11, textColor=ACCENT, fontName="Helvetica-Bold",
+        spaceBefore=14, spaceAfter=6,
     )
     body_style = ParagraphStyle(
         "Body", parent=base["Normal"],
@@ -505,8 +503,7 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
     )
     small_style = ParagraphStyle(
         "Small", parent=base["Normal"],
-        fontSize=8, textColor=MUTED,
-        alignment=TA_CENTER, spaceBefore=20,
+        fontSize=8, textColor=MUTED, alignment=TA_CENTER, spaceBefore=20,
     )
 
     story = []
@@ -552,15 +549,15 @@ def generate_pdf_report(disease, confidence, severity_label, report_lines, all_p
 
     prob_table = Table(prob_data, colWidths=[4 * inch, 2.5 * inch])
     prob_table.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0),  (-1, 0),  ACCENT2),
-        ("TEXTCOLOR",     (0, 0),  (-1, 0),  colors.white),
-        ("FONTNAME",      (0, 0),  (-1, 0),  "Helvetica-Bold"),
-        ("BACKGROUND",    (0, 1),  (-1, -1), DARK),
-        ("ROWBACKGROUNDS",(0, 1),  (-1, -1), [DARK, SURFACE]),
-        ("TEXTCOLOR",     (0, 1),  (-1, -1), TEXT),
-        ("FONTSIZE",      (0, 0),  (-1, -1), 9),
-        ("PADDING",       (0, 0),  (-1, -1), 7),
-        ("GRID",          (0, 0),  (-1, -1), 0.4, colors.HexColor("#1c2536")),
+        ("BACKGROUND",    (0, 0), (-1, 0),  ACCENT2),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
+        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("BACKGROUND",    (0, 1), (-1, -1), DARK),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [DARK, SURFACE]),
+        ("TEXTCOLOR",     (0, 1), (-1, -1), TEXT),
+        ("FONTSIZE",      (0, 0), (-1, -1), 9),
+        ("PADDING",       (0, 0), (-1, -1), 7),
+        ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#1c2536")),
         *[("TEXTCOLOR",   (0, i + 1), (-1, i + 1), ACCENT)
           for i, (cls, _) in enumerate(sorted_probs) if cls == disease],
     ]))
@@ -604,7 +601,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Model: EfficientNetB3 · Input: 300×300px")
 
-# Load vision model
+# Load models
 vision_model = load_vision_model()
 
 tokenizer, llm = None, None
