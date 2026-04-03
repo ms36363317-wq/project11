@@ -11,7 +11,6 @@ from PIL import Image
 import io
 from datetime import datetime
 import gdown
-
 # TensorFlow (نسخة واحدة بس)
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -226,7 +225,6 @@ DISEASE_INFO = {
 # Model Loaders
 # ─────────────────────────────────────────────
 @st.cache_resource
-import keras
 
 @st.cache_resource
 def load_vision_model():
