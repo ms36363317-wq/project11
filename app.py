@@ -25,12 +25,8 @@ MODEL1_PATH = "model.h5"
 MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
 
 def download_models():
-    for url, path in [
-        (MODEL1_URL, MODEL1_PATH),
-    ]:
-        if not os.path.exists(path):
-            gdown.download(url, path, quiet=False, fuzzy=True)
-
+    if not os.path.exists(MODEL1_PATH):
+        gdown.download(MODEL1_URL, MODEL1_PATH, quiet=False, fuzzy=True)
 # ─────────────────────────────────────────────
 # Page Config
 # ─────────────────────────────────────────────
@@ -225,22 +221,30 @@ DISEASE_INFO = {
 # Model Loaders
 # ─────────────────────────────────────────────
 @st.cache_resource
-
-@st.cache_resource
 def load_vision_model():
 
     model_path = "model.h5"
 
+    # ✅ تحميل لو مش موجود
+    if not os.path.exists(model_path):
+        with st.spinner("⬇️ Downloading model..."):
+            import gdown
+            url = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
+            gdown.download(url, model_path, quiet=False, fuzzy=True)
+
     st.info(f"📦 Loading model from: {model_path}")
 
+    # ✅ Debug
+    st.write("Files:", os.listdir())
+
     try:
+        import keras
         model = keras.models.load_model(model_path, compile=False)
         st.success("✅ Model loaded successfully")
         return model
     except Exception as e:
         st.error(f"❌ Failed to load model: {e}")
         return None
-
 
 @st.cache_resource
 def load_llm():
