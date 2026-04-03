@@ -1,12 +1,12 @@
 import os
-
+import keras
+from keras.models import load_model
 import streamlit as st
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
-
 from PIL import Image
 import io
 from datetime import datetime
@@ -226,35 +226,22 @@ DISEASE_INFO = {
 # Model Loaders
 # ─────────────────────────────────────────────
 @st.cache_resource
+import keras
+
+@st.cache_resource
 def load_vision_model():
 
-    with st.spinner("⬇️ Downloading models from Google Drive (first run only)..."):
-        download_models()
-
-    # تحديد المسار الصحيح
-    model_path = None
-    for path in [MODEL1_PATH]:
-        if os.path.exists(path):
-            model_path = path
-            break
-
-    if model_path is None:
-        st.error("❌ Model file not found. Could not download from Google Drive.")
-        return None
+    model_path = "model.h5"
 
     st.info(f"📦 Loading model from: {model_path}")
 
-    # 🔥 Strategy 1 (الأهم) → tf.keras
     try:
-        model = tf.keras.models.load_model(model_path, compile=False)
-        st.success("✅ Model loaded باستخدام tf.keras")
+        model = keras.models.load_model(model_path, compile=False)
+        st.success("✅ Model loaded successfully")
         return model
     except Exception as e:
-        st.warning(f"⚠️ tf.keras failed: {e}")
-
-    # ❌ لو كله فشل
-    st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
-    return None
+        st.error(f"❌ Failed to load model: {e}")
+        return None
 
 
 @st.cache_resource
