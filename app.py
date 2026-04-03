@@ -21,17 +21,24 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # Import tf_keras first (Keras 2 compatible with TF 2.15)
-import tensorflow as tf
-from tensorflow.keras.models import load_model
+try:
+    import tf_keras as keras_lib
+    from tf_keras.models import load_model
+    import tensorflow as tf
+    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
+except ImportError:
+    import tensorflow as tf
+    from tensorflow.keras.models import load_model
+    keras_lib = tf.keras
+    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 
-_PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
 MODEL1_PATH = "model.h5"
 MODEL2_PATH = "best_efficientnetb3.h5"
 MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-MODEL2_URL  = "url = "https://drive.google.com/uc?id=1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz""
+MODEL2_URL  = "https://drive.google.com/uc?id=1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
 
 def download_models():
     if not os.path.exists(MODEL1_PATH):
@@ -238,43 +245,35 @@ def load_vision_model():
         download_models()
 
     model_path = None
-    for path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
+    for path in [MODEL2_PATH, MODEL1_PATH]:
         if os.path.exists(path):
             model_path = path
             break
 
     if model_path is None:
-        st.error("❌ Model file not found.")
+        st.error("❌ Model file not found. Could not download from Google Drive.")
         return None
 
-    st.info(f"Found model file: `{model_path}` — attempting to load...")
-
-    # Strategy 1: tf_keras
+    # Strategy 1: tf_keras — Keras 2, fully compatible with TF 2.15
     try:
         import tf_keras
-        m = tf_keras.models.load_model(model_path, compile=False)
-        st.success("✅ Loaded via tf_keras")
-        return m
-    except Exception as e1:
-        st.warning(f"tf_keras failed: {e1}")
+        return tf_keras.models.load_model(model_path, compile=False)
+    except Exception:
+        pass
 
-    # Strategy 2: tf.keras
+    # Strategy 2: tf.keras with legacy env var already set at module top
     try:
-        m = tf.keras.models.load_model(model_path, compile=False)
-        st.success("✅ Loaded via tf.keras")
-        return m
-    except Exception as e2:
-        st.warning(f"tf.keras failed: {e2}")
+        return tf.keras.models.load_model(model_path, compile=False)
+    except Exception:
+        pass
 
-    # Strategy 3: standard load_model
+    # Strategy 3: standard load_model imported at top
     try:
-        m = load_model(model_path, compile=False)
-        st.success("✅ Loaded via load_model")
-        return m
-    except Exception as e3:
-        st.warning(f"load_model failed: {e3}")
+        return load_model(model_path, compile=False)
+    except Exception:
+        pass
 
-    st.error("❌ All loading strategies failed.")
+    st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
     return None
 
 
@@ -459,6 +458,122 @@ def _fallback_explain(disease, confidence):
         "5. Schedule an appointment with an ophthalmologist."
     ])
 
+# ─────────────────────────────────────────────
+# PDF Report Generator
+# ─────────────────────────────────────────────
+def generate_pdf_report(disease, confidence, severity_label, report_lines, all_probs, pil_img=None):
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        rightMargin=0.75 * inch,
+        leftMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+
+    DARK      = colors.HexColor("#0a0e1a")
+    SURFACE   = colors.HexColor("#111827")
+    ACCENT    = colors.HexColor("#00d4ff")
+    ACCENT2   = colors.HexColor("#7c3aed")
+    TEXT      = colors.HexColor("#e2e8f0")
+    MUTED     = colors.HexColor("#64748b")
+    _, sev_hex = DISEASE_INFO.get(disease, ('Unknown', '#94a3b8'))
+    SEV_COLOR = colors.HexColor(sev_hex)
+
+    base = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "ReportTitle", parent=base["Normal"],
+        fontSize=22, textColor=ACCENT, alignment=TA_CENTER,
+        spaceAfter=4, fontName="Helvetica-Bold",
+    )
+    subtitle_style = ParagraphStyle(
+        "ReportSubtitle", parent=base["Normal"],
+        fontSize=9, textColor=MUTED, alignment=TA_CENTER, spaceAfter=2,
+    )
+    section_style = ParagraphStyle(
+        "Section", parent=base["Normal"],
+        fontSize=11, textColor=ACCENT, fontName="Helvetica-Bold",
+        spaceBefore=14, spaceAfter=6,
+    )
+    body_style = ParagraphStyle(
+        "Body", parent=base["Normal"],
+        fontSize=10, textColor=TEXT, leading=15, spaceAfter=4,
+    )
+    small_style = ParagraphStyle(
+        "Small", parent=base["Normal"],
+        fontSize=8, textColor=MUTED, alignment=TA_CENTER, spaceBefore=20,
+    )
+
+    story = []
+
+    story.append(Paragraph("👁  Eye Disease AI Diagnostics", title_style))
+    story.append(Paragraph("EfficientNetB3 · Grad-CAM++ · AI Medical Report", subtitle_style))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}", subtitle_style))
+    story.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+
+    story.append(Paragraph("Diagnosis Summary", section_style))
+    diag_data = [
+        ["Predicted Condition", disease],
+        ["Confidence",          f"{confidence:.1%}"],
+        ["Severity",            severity_label],
+    ]
+    diag_table = Table(diag_data, colWidths=[2.2 * inch, 4.3 * inch])
+    diag_table.setStyle(TableStyle([
+        ("BACKGROUND",     (0, 0), (0, -1), SURFACE),
+        ("BACKGROUND",     (1, 0), (1, -1), DARK),
+        ("TEXTCOLOR",      (0, 0), (0, -1), MUTED),
+        ("TEXTCOLOR",      (1, 0), (1, 0),  ACCENT),
+        ("TEXTCOLOR",      (1, 1), (1, 1),  ACCENT2),
+        ("TEXTCOLOR",      (1, 2), (1, 2),  SEV_COLOR),
+        ("FONTNAME",       (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE",       (0, 0), (-1, -1), 10),
+        ("FONTNAME",       (1, 0), (1, 0),  "Helvetica-Bold"),
+        ("PADDING",        (0, 0), (-1, -1), 8),
+        ("GRID",           (0, 0), (-1, -1), 0.5, colors.HexColor("#1c2536")),
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [SURFACE, DARK]),
+    ]))
+    story.append(diag_table)
+
+    story.append(Paragraph("AI Medical Report", section_style))
+    for i, line in enumerate(report_lines, 1):
+        text = line.lstrip("0123456789. ").strip()
+        story.append(Paragraph(f"<b>{i}.</b>  {text}", body_style))
+
+    story.append(Paragraph("Class Probabilities", section_style))
+    sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
+    prob_data = [["Condition", "Probability"]]
+    for cls, prob in sorted_probs:
+        prob_data.append([cls, f"{prob:.1%}"])
+
+    prob_table = Table(prob_data, colWidths=[4 * inch, 2.5 * inch])
+    prob_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, 0),  ACCENT2),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
+        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("BACKGROUND",    (0, 1), (-1, -1), DARK),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [DARK, SURFACE]),
+        ("TEXTCOLOR",     (0, 1), (-1, -1), TEXT),
+        ("FONTSIZE",      (0, 0), (-1, -1), 9),
+        ("PADDING",       (0, 0), (-1, -1), 7),
+        ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#1c2536")),
+        *[("TEXTCOLOR",   (0, i + 1), (-1, i + 1), ACCENT)
+          for i, (cls, _) in enumerate(sorted_probs) if cls == disease],
+    ]))
+    story.append(prob_table)
+
+    story.append(HRFlowable(width="100%", thickness=0.5, color=MUTED, spaceBefore=20))
+    story.append(Paragraph(
+        "⚠  This report is generated by an AI model for informational purposes only. "
+        "It is not a substitute for professional medical advice, diagnosis, or treatment. "
+        "Always consult a qualified ophthalmologist.",
+        small_style,
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
 
 # ─────────────────────────────────────────────
 # UI
