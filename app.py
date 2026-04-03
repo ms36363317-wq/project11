@@ -14,6 +14,12 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from datetime import datetime
 import gdown
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # ─────────────────────────────────────────────
 # Model Paths & Download
@@ -28,12 +34,6 @@ def download_models():
         gdown.download(MODEL1_URL, MODEL1_PATH, quiet=False)
     if not os.path.exists(MODEL2_PATH):
         gdown.download(MODEL2_URL, MODEL2_PATH, quiet=False)
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # ─────────────────────────────────────────────
 # Page Config
