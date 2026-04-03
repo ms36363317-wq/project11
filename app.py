@@ -1,5 +1,4 @@
 import os
-os.environ["TF_USE_LEGACY_KERAS"] = "1"
 
 import streamlit as st
 import numpy as np
@@ -7,31 +6,29 @@ import cv2
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')
+
 from PIL import Image
 import io
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 from datetime import datetime
 import gdown
+
+# TensorFlow (نسخة واحدة بس)
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+# EfficientNet preprocessing
+_PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
+
+# (اختياري لو هتستخدم LLM)
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# PDF
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-
-# Import tf_keras first (Keras 2 compatible with TF 2.15)
-try:
-    import tf_keras as keras_lib
-    from tf_keras.models import load_model
-    import tensorflow as tf
-    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
-except ImportError:
-    import tensorflow as tf
-    from tensorflow.keras.models import load_model
-    keras_lib = tf.keras
-    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
-
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
