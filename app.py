@@ -23,14 +23,11 @@ _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 # Model Paths & Download
 # ─────────────────────────────────────────────
 MODEL1_PATH = "model.h5"
-MODEL2_PATH = "best_efficientnetb3.h5"
 MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-MODEL2_URL  = "https://drive.google.com/uc?id=1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
 
 def download_models():
     for url, path in [
         (MODEL1_URL, MODEL1_PATH),
-        (MODEL2_URL, MODEL2_PATH)
     ]:
         if not os.path.exists(path):
             gdown.download(url, path, quiet=False, fuzzy=True)
@@ -236,7 +233,7 @@ def load_vision_model():
 
     # تحديد المسار الصحيح
     model_path = None
-    for path in [MODEL1_PATH, MODEL2_PATH]:
+    for path in [MODEL1_PATH]:
         if os.path.exists(path):
             model_path = path
             break
@@ -254,14 +251,6 @@ def load_vision_model():
         return model
     except Exception as e:
         st.warning(f"⚠️ tf.keras failed: {e}")
-
-    # 🔥 Strategy 2 → load_model المباشر
-    try:
-        model = load_model(model_path, compile=False)
-        st.success("✅ Model loaded باستخدام load_model")
-        return model
-    except Exception as e:
-        st.warning(f"⚠️ load_model failed: {e}")
 
     # ❌ لو كله فشل
     st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
