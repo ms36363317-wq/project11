@@ -1,5 +1,5 @@
 streamlit>=1.35
-tensorflow>=2.15,<2.19
+tensorflow==2.15.0
 tf-keras>=2.15
 torch>=2.2
 transformers>=4.40,<5.0
@@ -12,3 +12,4 @@ matplotlib>=3.8
 seaborn>=0.13
 gdown
 reportlab
+keras==2.15.0
