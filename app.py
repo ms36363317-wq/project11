@@ -20,7 +20,8 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
-
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
