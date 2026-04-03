@@ -35,7 +35,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 MODEL1_PATH = "model.h5"
 MODEL2_PATH = "best_efficientnetb3.h5"
 MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-MODEL2_URL  = "https://drive.google.com/uc?id=1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
+MODEL2_URL  = "https://drive.google.com/uc?id=11XxYgPmxZ_eAFWTGBZLf_7iDZfQazyX2"
 
 def download_models():
     if not os.path.exists(MODEL1_PATH):
