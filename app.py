@@ -31,7 +31,17 @@ except ImportError:
     from tensorflow.keras.models import load_model
     keras_lib = tf.keras
     _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
-
+st.sidebar.caption(f"TF: {tf.__version__}")
+try:
+    import tf_keras
+    st.sidebar.caption(f"tf_keras: {tf_keras.__version__}")
+except:
+    st.sidebar.caption("tf_keras: NOT installed")
+try:
+    import keras
+    st.sidebar.caption(f"keras: {keras.__version__}")
+except:
+    st.sidebar.caption("keras: NOT installed")
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
@@ -251,29 +261,37 @@ def load_vision_model():
             break
 
     if model_path is None:
-        st.error("❌ Model file not found. Could not download from Google Drive.")
+        st.error("❌ Model file not found.")
         return None
 
-    # Strategy 1: tf_keras — Keras 2, fully compatible with TF 2.15
+    st.info(f"Found model file: `{model_path}` — attempting to load...")
+
+    # Strategy 1: tf_keras
     try:
         import tf_keras
-        return tf_keras.models.load_model(model_path, compile=False)
-    except Exception:
-        pass
+        m = tf_keras.models.load_model(model_path, compile=False)
+        st.success("✅ Loaded via tf_keras")
+        return m
+    except Exception as e1:
+        st.warning(f"tf_keras failed: {e1}")
 
-    # Strategy 2: tf.keras with legacy env var already set at module top
+    # Strategy 2: tf.keras
     try:
-        return tf.keras.models.load_model(model_path, compile=False)
-    except Exception:
-        pass
+        m = tf.keras.models.load_model(model_path, compile=False)
+        st.success("✅ Loaded via tf.keras")
+        return m
+    except Exception as e2:
+        st.warning(f"tf.keras failed: {e2}")
 
-    # Strategy 3: standard load_model imported at top
+    # Strategy 3: standard load_model
     try:
-        return load_model(model_path, compile=False)
-    except Exception:
-        pass
+        m = load_model(model_path, compile=False)
+        st.success("✅ Loaded via load_model")
+        return m
+    except Exception as e3:
+        st.warning(f"load_model failed: {e3}")
 
-    st.error("❌ Could not load the model. Check Keras/TF version compatibility.")
+    st.error("❌ All loading strategies failed.")
     return None
 
 
