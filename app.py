@@ -21,12 +21,12 @@ _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
-MODEL1_PATH = "model.h5"
-MODEL1_URL  = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
+MODEL_PATH = "model.keras"
+MODEL_URL  = "https://drive.google.com/uc?id=13ZbZU6aYtHAs4cEeOwnDI_VRzTwZ0sUj"
 
 def download_models():
-    if not os.path.exists(MODEL1_PATH):
-        gdown.download(MODEL1_URL, MODEL1_PATH, quiet=False, fuzzy=True)
+    if not os.path.exists(MODEL_PATH):
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False, fuzzy=True)
 # ─────────────────────────────────────────────
 # Page Config
 # ─────────────────────────────────────────────
@@ -223,23 +223,14 @@ DISEASE_INFO = {
 @st.cache_resource
 def load_vision_model():
 
-    model_path = "model.h5"
+    download_models()
 
-    # ✅ تحميل لو مش موجود
-    if not os.path.exists(model_path):
-        with st.spinner("⬇️ Downloading model..."):
-            import gdown
-            url = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
-            gdown.download(url, model_path, quiet=False, fuzzy=True)
+    model_path = MODEL_PATH
 
     st.info(f"📦 Loading model from: {model_path}")
 
-    # ✅ Debug
-    st.write("Files:", os.listdir())
-
     try:
-        import keras
-        model = keras.models.load_model(model_path, compile=False)
+        model = tf.keras.models.load_model(model_path)
         st.success("✅ Model loaded successfully")
         return model
     except Exception as e:
