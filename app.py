@@ -21,27 +21,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # Import tf_keras first (Keras 2 compatible with TF 2.15)
-try:
-    import tf_keras as keras_lib
-    from tf_keras.models import load_model
-    import tensorflow as tf
-    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
-except ImportError:
-    import tensorflow as tf
-    from tensorflow.keras.models import load_model
-    keras_lib = tf.keras
-    _PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
-st.sidebar.caption(f"TF: {tf.__version__}")
-try:
-    import tf_keras
-    st.sidebar.caption(f"tf_keras: {tf_keras.__version__}")
-except:
-    st.sidebar.caption("tf_keras: NOT installed")
-try:
-    import keras
-    st.sidebar.caption(f"keras: {keras.__version__}")
-except:
-    st.sidebar.caption("keras: NOT installed")
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+
+_PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 # ─────────────────────────────────────────────
 # Model Paths & Download
 # ─────────────────────────────────────────────
