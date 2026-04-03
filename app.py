@@ -238,7 +238,7 @@ def load_vision_model():
         download_models()
 
     model_path = None
-    for path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.keras"]:
+    for path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
         if os.path.exists(path):
             model_path = path
             break
