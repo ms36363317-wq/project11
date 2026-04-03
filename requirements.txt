@@ -6,3 +6,6 @@ opencv-python-headless>=4.9
 gdown
 matplotlib>=3.8
 streamlit>=1.35
+transformers>=4.40,<5.0
+torch>=2.2
+accelerate>=0.30
