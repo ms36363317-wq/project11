@@ -13,6 +13,21 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from datetime import datetime
+import gdown
+
+# ─────────────────────────────────────────────
+# Model Paths & Download
+# ─────────────────────────────────────────────
+MODEL1_PATH = "model.h5"
+MODEL2_PATH = "best_efficientnetb3.keras"
+MODEL1_URL = "https://drive.google.com/uc?id=11tjmQJITN0zHQ7x2wMPOF9L1JWnoZTxQ"
+MODEL2_URL = "https://drive.google.com/uc?id=11XxYgPmxZ_eAFWTGBZLf_7iDZfQazyX2"
+
+def download_models():
+    if not os.path.exists(MODEL1_PATH):
+        gdown.download(MODEL1_URL, MODEL1_PATH, quiet=False)
+    if not os.path.exists(MODEL2_PATH):
+        gdown.download(MODEL2_URL, MODEL2_PATH, quiet=False)
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.units import inch
@@ -226,12 +241,16 @@ DISEASE_INFO = {
 # ─────────────────────────────────────────────
 @st.cache_resource
 def load_vision_model():
-    # Support both naming conventions
-    for model_path in ["best_efficientnetb3.h5", "model.h5"]:
+    # Download models from Google Drive if not present
+    with st.spinner("⬇️ Downloading models from Google Drive (first run only)..."):
+        download_models()
+
+    # Support all naming conventions (prefer .keras, fallback to .h5)
+    for model_path in [MODEL2_PATH, MODEL1_PATH, "best_efficientnetb3.h5"]:
         if os.path.exists(model_path):
             break
     else:
-        st.error("❌ Model file not found.\n\nPlace `best_efficientnetb3.h5` (or `model.h5`) in the same directory as this app.")
+        st.error("❌ Model file not found. Could not download from Google Drive.")
         return None
 
     # Try multiple loading strategies for Keras 2 / Keras 3 / TF compatibility
