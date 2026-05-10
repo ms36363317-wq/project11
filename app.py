@@ -1,677 +1,830 @@
+"""
+╔══════════════════════════════════════════════════════════════╗
+║     Assistant For Detection Of Retinal Diseases              ║
+║     Built with Streamlit · EfficientNetB3 · Grad-CAM · Ollama║
+╚══════════════════════════════════════════════════════════════╝
+"""
+
+# ==============================
+# Imports
+# ==============================
 import os
-import keras
-from keras.models import load_model
-import streamlit as st
-import numpy as np
+
 import cv2
-import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.use('Agg')
-from PIL import Image
-import io
-from datetime import datetime
 import gdown
-# TensorFlow (نسخة واحدة بس)
+import numpy as np
+import requests
+import streamlit as st
 import tensorflow as tf
+from PIL import Image
 from tensorflow.keras.models import load_model
-from transformers import AutoTokenizer, AutoModelForCausalLM
-# EfficientNet preprocessing
-_PREPROCESS = tf.keras.applications.efficientnet.preprocess_input
 
-# ─────────────────────────────────────────────
-# Model Paths & Download
-# ─────────────────────────────────────────────
-MODEL_PATH = "model.keras"
-MODEL_URL  = "https://drive.google.com/uc?id=13ZbZU6aYtHAs4cEeOwnDI_VRzTwZ0sUj"
 
-def download_models():
-    if not os.path.exists(MODEL_PATH):
-        gdown.download(MODEL_URL, MODEL_PATH, quiet=False, fuzzy=True)
-# ─────────────────────────────────────────────
-# Page Config
-# ─────────────────────────────────────────────
+# ==============================
+# Page Configuration
+# ==============================
 st.set_page_config(
-    page_title="Eye Disease AI",
+    page_title="Assistant For Detection Of Retinal Diseases",
     page_icon="👁️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────
+
+# ==============================
 # Custom CSS
-# ─────────────────────────────────────────────
+# ==============================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
-:root {
-    --bg: #0a0e1a;
-    --surface: #111827;
-    --surface2: #1c2536;
-    --accent: #00d4ff;
-    --accent2: #7c3aed;
-    --text: #e2e8f0;
-    --muted: #64748b;
-    --danger: #ef4444;
-    --success: #10b981;
-    --warning: #f59e0b;
-}
+    html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-    background-color: var(--bg);
-    color: var(--text);
-}
+    html, body, [class*="css"], .stApp, .main {
+        background-color: #f0fdf4 !important;
+        color: #166534 !important;
+    }
+    .stApp {
+        background: linear-gradient(150deg, #f0fdf4 0%, #dcfce7 40%, #f0fdf4 100%) !important;
+        color: #166534;
+    }
 
-.stApp { background: var(--bg); }
+    #MainMenu, footer, header { visibility: hidden; }
+    .block-container { padding: 0 2rem 4rem; max-width: 1200px; }
 
-.header-block {
-    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
-    border: 1px solid rgba(0, 212, 255, 0.2);
-    border-radius: 16px;
-    padding: 2rem 2.5rem;
-    margin-bottom: 2rem;
-    position: relative;
-    overflow: hidden;
-}
-.header-block::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(ellipse at 60% 40%, rgba(0,212,255,0.06) 0%, transparent 60%);
-    pointer-events: none;
-}
-.header-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: -1px;
-    margin: 0;
-}
-.header-sub {
-    color: var(--muted);
-    font-size: 0.95rem;
-    margin-top: 0.4rem;
-    font-weight: 300;
-}
+    /* ── Hero ── */
+    .hero {
+        position: relative;
+        text-align: center;
+        padding: 3.5rem 2rem 2.5rem;
+        overflow: hidden;
+    }
+    .hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(ellipse 70% 50% at 50% 0%, rgba(22,163,74,0.12) 0%, transparent 65%),
+            radial-gradient(ellipse 35% 25% at 10% 85%, rgba(21,128,61,0.08) 0%, transparent 60%),
+            radial-gradient(ellipse 40% 30% at 90% 70%, rgba(74,222,128,0.1) 0%, transparent 55%);
+        pointer-events: none;
+    }
+    .hero-title {
+        font-family: 'Syne', sans-serif;
+        font-size: clamp(2.4rem, 5vw, 4rem);
+        font-weight: 800;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+        color: #14532d;
+        margin: 0 0 1rem;
+    }
+    .hero-title span {
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 60%, #4ade80 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .hero-subtitle {
+        font-size: 1rem;
+        font-weight: 300;
+        color: #4b7a5e;
+        max-width: 600px;
+        margin: 0 auto;
+        line-height: 1.75;
+        text-align: center;
+    }
+    .divider {
+        height: 1.5px;
+        background: linear-gradient(90deg, transparent, rgba(22,163,74,0.4), transparent);
+        margin: 0 0 2.5rem;
+    }
 
-.card {
-    background: var(--surface);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.2rem;
-}
+    /* ── Upload Section ── */
+    .upload-section {
+        background: #ffffff;
+        border: 2px dashed rgba(22,163,74,0.35);
+        border-radius: 20px;
+        padding: 2.5rem 2rem;
+        text-align: center;
+        margin-bottom: 2rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 12px rgba(22,163,74,0.07);
+    }
+    .upload-section:hover {
+        border-color: #16a34a;
+        background: #f0fdf4;
+        box-shadow: 0 4px 20px rgba(22,163,74,0.12);
+    }
+    .upload-label {
+        font-family: 'Syne', sans-serif;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #15803d;
+        margin-bottom: 0.4rem;
+    }
+    .upload-hint { font-size: 0.82rem; color: #6aaa85; }
 
-.disease-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #00d4ff22, #7c3aed22);
-    border: 1px solid var(--accent);
-    border-radius: 8px;
-    padding: 0.5rem 1.2rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 1.3rem;
-    color: var(--accent);
-    margin: 0.5rem 0 1rem;
-}
+    [data-testid="stFileUploader"] { background: transparent !important; }
+    [data-testid="stFileUploader"] > div { border: none !important; background: transparent !important; padding: 0 !important; }
+    [data-testid="stFileUploader"] label { color: #16a34a !important; font-size: 0.9rem; }
 
-.conf-bar-bg {
-    background: #1e293b;
-    border-radius: 100px;
-    height: 10px;
-    width: 100%;
-    overflow: hidden;
-    margin: 0.3rem 0 1rem;
-}
-.conf-bar-fill {
-    height: 100%;
-    border-radius: 100px;
-    background: linear-gradient(90deg, var(--accent2), var(--accent));
-    transition: width 0.8s ease;
-}
+    /* ── Image Cards ── */
+    .img-card {
+        background: #ffffff;
+        border: 1px solid #bbf7d0;
+        border-radius: 14px;
+        padding: 0.6rem 0.6rem 0.5rem;
+        text-align: center;
+        max-width: 220px;
+        margin: 0 auto;
+        box-shadow: 0 4px 16px rgba(22,163,74,0.1);
+    }
+    .img-card-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: #6aaa85;
+        margin-top: 0.5rem;
+    }
+    [data-testid="stImage"] img {
+        border-radius: 10px;
+        width: 100%;
+        max-height: 200px;
+        object-fit: cover;
+    }
 
-.report-line {
-    display: flex;
-    gap: 0.8rem;
-    align-items: flex-start;
-    margin-bottom: 0.7rem;
-    padding: 0.6rem 0.8rem;
-    background: rgba(0,212,255,0.04);
-    border-left: 2px solid var(--accent2);
-    border-radius: 0 6px 6px 0;
-}
-.line-num {
-    font-family: 'Space Mono', monospace;
-    color: var(--accent);
-    font-size: 0.8rem;
-    min-width: 1.4rem;
-    margin-top: 2px;
-}
-.line-text {
-    color: var(--text);
-    font-size: 0.92rem;
-    line-height: 1.5;
-}
+    /* ── Widgets ── */
+    .stSelectbox label, .stTextInput label, .stToggle label,
+    .stRadio label, .stExpander summary, p, span, div {
+        color: #166534 !important;
+    }
+    .stSelectbox > div > div,
+    .stTextInput > div > div > input {
+        background: #ffffff !important;
+        border-color: #bbf7d0 !important;
+        color: #14532d !important;
+    }
 
-section[data-testid="stSidebar"] {
-    background: var(--surface) !important;
-    border-right: 1px solid rgba(255,255,255,0.06);
-}
+    /* ── Progress Bar ── */
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #22c55e, #16a34a) !important;
+        border-radius: 999px !important;
+    }
+    .stProgress > div > div {
+        background: #dcfce7 !important;
+        border-radius: 999px !important;
+        height: 8px !important;
+    }
 
-.stFileUploader > div {
-    background: var(--surface2) !important;
-    border: 2px dashed rgba(0,212,255,0.3) !important;
-    border-radius: 12px !important;
-}
+    /* ── Confidence Display ── */
+    .confidence-label {
+        font-size: 0.78rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: #6aaa85;
+        margin-bottom: 0.5rem;
+    }
+    .confidence-value {
+        font-family: 'Syne', sans-serif;
+        font-size: 2.4rem;
+        font-weight: 800;
+        color: #14532d;
+        line-height: 1;
+    }
+    .confidence-value span { font-size: 1rem; font-weight: 400; color: #6aaa85; }
 
-.stButton > button {
-    background: linear-gradient(135deg, #00d4ff, #7c3aed) !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 8px !important;
-    padding: 0.6rem 2rem !important;
-    font-family: 'Space Mono', monospace !important;
-    font-weight: 700 !important;
-    font-size: 0.9rem !important;
-    letter-spacing: 0.05em !important;
-    transition: all 0.2s !important;
-}
-.stButton > button:hover {
-    opacity: 0.85 !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 4px 20px rgba(0,212,255,0.3) !important;
-}
+    /* ── Disease Card ── */
+    .disease-card {
+        background: #ffffff;
+        border: 1px solid #bbf7d0;
+        border-left: 4px solid #16a34a;
+        border-radius: 16px;
+        padding: 1.2rem 1.4rem;
+        margin-top: 1rem;
+        box-shadow: 0 2px 16px rgba(22,163,74,0.08);
+    }
+    .disease-card-title {
+        font-family: 'Syne', sans-serif;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #15803d;
+        margin-bottom: 0.4rem;
+    }
+    .disease-card-text { font-size: 0.85rem; color: #4b7a5e; line-height: 1.7; }
 
-.stSpinner > div { border-top-color: var(--accent) !important; }
-#MainMenu, footer, header { visibility: hidden; }
+    /* ── LLM Explanation Card ── */
+    .llm-card {
+        background: #f0fdf4;
+        border: 1px solid #86efac;
+        border-left: 4px solid #4ade80;
+        border-radius: 16px;
+        padding: 1.2rem 1.4rem;
+        margin-top: 1rem;
+        box-shadow: 0 2px 16px rgba(74,222,128,0.1);
+    }
+    .llm-card-title {
+        font-family: 'Syne', sans-serif;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #16a34a;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .llm-line {
+        font-size: 0.86rem;
+        color: #2d6a44;
+        line-height: 1.75;
+        margin-bottom: 0.45rem;
+        padding-left: 0.6rem;
+        border-left: 2px solid rgba(22,163,74,0.35);
+    }
+    .llm-error {
+        font-size: 0.82rem;
+        color: #b45309;
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.3);
+        border-radius: 8px;
+        padding: 0.7rem 1rem;
+        margin-top: 0.5rem;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-left: 4px solid #f59e0b;
+        border-radius: 12px;
+        padding: 0.9rem 1.2rem;
+        font-size: 0.78rem;
+        color: #92400e;
+        text-align: center;
+        margin-top: 2rem;
+        line-height: 1.65;
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%) !important;
+        border-right: 2px solid #bbf7d0 !important;
+    }
+
+    /* ── Expander ── */
+    .stExpander {
+        background: #ffffff !important;
+        border: 1px solid #bbf7d0 !important;
+        border-radius: 12px !important;
+    }
+
+    /* ── Button ── */
+    .stButton > button {
+        background: linear-gradient(135deg, #16a34a, #15803d) !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 2px 8px rgba(22,163,74,0.3) !important;
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 16px rgba(22,163,74,0.4) !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
+
+# ==============================
 # Constants
-# ─────────────────────────────────────────────
+# ==============================
+MODEL_PATH  = "best_efficientnetb3.h5"
+FILE_ID     = "1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
+
 CLASS_NAMES = [
-    'Diabetic Retinopathy',
-    'Disc Edema',
-    'Healthy',
-    'Myopia',
-    'Pterygium',
-    'Retinal Detachment',
-    'Retinitis Pigmentosa'
+    "Diabetic Retinopathy",
+    "Disc Edema",
+    "Healthy",
+    "Myopia",
+    "Pterygium",
+    "Retinal Detachment",
+    "Retinitis Pigmentosa",
 ]
 
-IMG_SIZE = (300, 300)
-LAST_CONV_LAYER = "top_conv"
-
-DISEASE_INFO = {
-    'Diabetic Retinopathy': ('⚠️ High',      '#ef4444'),
-    'Disc Edema':           ('⚠️ High',      '#ef4444'),
-    'Healthy':              ('✅ Normal',     '#10b981'),
-    'Myopia':               ('🟡 Moderate',  '#f59e0b'),
-    'Pterygium':            ('🟡 Moderate',  '#f59e0b'),
-    'Retinal Detachment':   ('🚨 Critical',  '#dc2626'),
-    'Retinitis Pigmentosa': ('⚠️ High',      '#ef4444'),
+SEVERITY_COLOR = {
+    "Healthy":               "#22c55e",
+    "Myopia":                "#f59e0b",
+    "Pterygium":             "#f59e0b",
+    "Diabetic Retinopathy":  "#ef4444",
+    "Disc Edema":            "#ef4444",
+    "Retinal Detachment":    "#dc2626",
+    "Retinitis Pigmentosa":  "#ef4444",
 }
 
-# ─────────────────────────────────────────────
-# Model Loaders
-# ─────────────────────────────────────────────
-@st.cache_resource
-def load_vision_model():
+DISEASE_INFO = {
+    "Diabetic Retinopathy": {
+        "desc":   "تلف في أوعية الدم الدقيقة بشبكية العين نتيجة مرض السكري. يُعدّ من الأسباب الرئيسية للعمى لدى البالغين.",
+        "action": "يُنصح بفحص دوري كل 6 أشهر ومراقبة مستوى السكر في الدم.",
+        "icon":   "🩺",
+    },
+    "Disc Edema": {
+        "desc":   "تورم في القرص البصري قد يشير إلى ارتفاع ضغط الدم داخل الجمجمة أو اضطرابات عصبية.",
+        "action": "يتطلب تقييمًا عصبيًا عاجلاً وصور أشعة للدماغ.",
+        "icon":   "🧠",
+    },
+    "Healthy": {
+        "desc":   "لم يُكتشف أي مؤشر مرضي. تبدو شبكية العين سليمة وبحالة جيدة.",
+        "action": "حافظ على فحوصات دورية سنوية للعين للاطمئنان على صحتها.",
+        "icon":   "✅",
+    },
+    "Myopia": {
+        "desc":   "قِصَر النظر: صعوبة في رؤية الأشياء البعيدة بوضوح بسبب طول محور مقلة العين.",
+        "action": "يمكن تصحيحه بالنظارات أو العدسات اللاصقة أو جراحة الليزر.",
+        "icon":   "👓",
+    },
+    "Pterygium": {
+        "desc":   "نسيج ليفي وعائي ينمو على سطح القرنية من الملتحمة، وقد يؤثر على الرؤية.",
+        "action": "قد يحتاج إلى استئصال جراحي إذا تقدّم نحو مركز القرنية.",
+        "icon":   "🔬",
+    },
+    "Retinal Detachment": {
+        "desc":   "انفصال الشبكية عن طبقة الظهارة الصباغية، وهو طارئ طبي يستوجب تدخلاً فوريًا.",
+        "action": "توجّه فورًا إلى أقرب طوارئ عيون — يمكن أن يؤدي التأخير إلى فقدان البصر نهائيًا.",
+        "icon":   "🚨",
+    },
+    "Retinitis Pigmentosa": {
+        "desc":   "مجموعة اضطرابات وراثية تُسبب تدهورًا تدريجيًا في خلايا الشبكية المستقبلة للضوء.",
+        "action": "لا يوجد علاج شافٍ حتى الآن؛ التدبير يركز على إبطاء التقدم وتحسين جودة الحياة.",
+        "icon":   "🧬",
+    },
+}
 
-    download_models()
+PROMPT_TEMPLATE = """You are an ophthalmology AI assistant.
 
-    model_path = MODEL_PATH
-
-    st.info(f"📦 Loading model from: {model_path}")
-
-    try:
-        model = tf.keras.models.load_model(model_path)
-        st.success("✅ Model loaded successfully")
-        return model
-    except Exception as e:
-        st.error(f"❌ Failed to load model: {e}")
-        return None
-
-@st.cache_resource
-def load_llm():
-    model_name = "grok-3-betagrok-3grok-3-latest"
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        llm = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto"
-        )
-        return tokenizer, llm
-    except Exception as e:
-        st.warning(f"⚠️ Could not load Phi-3: {e}\n\nFalling back to rule-based explanations.")
-        return None, None
-
-# ─────────────────────────────────────────────
-# Inference Functions
-# ─────────────────────────────────────────────
-def preprocess_image(pil_img):
-    img = pil_img.resize(IMG_SIZE)
-    img_array = np.array(img.convert("RGB")).astype(np.float32)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = _PREPROCESS(img_array)
-    return img_array
-
-def predict_disease(img_array, model):
-    preds = model.predict(img_array, verbose=0)
-    class_idx = int(np.argmax(preds[0]))
-    confidence = float(np.max(preds[0]))
-    all_probs = {CLASS_NAMES[i]: float(preds[0][i]) for i in range(len(CLASS_NAMES))}
-    return CLASS_NAMES[class_idx], confidence, all_probs
-
-def generate_gradcam(img_array, model):
-    try:
-        grad_model = tf.keras.models.Model(
-            inputs=model.input,
-            outputs=[model.get_layer(LAST_CONV_LAYER).output, model.output]
-        )
-        with tf.GradientTape() as tape:
-            conv_outputs, predictions = grad_model(img_array)
-            pred_index = tf.argmax(predictions[0])
-            loss = predictions[:, pred_index]
-
-        grads = tape.gradient(loss, conv_outputs)[0]
-        conv_outputs = conv_outputs[0]
-
-        grads_sq = tf.square(grads)
-        grads_cu = grads_sq * grads
-        denom = 2 * grads_sq + tf.reduce_sum(conv_outputs * grads_cu, axis=(0, 1), keepdims=True)
-        denom = tf.where(denom != 0, denom, tf.ones_like(denom))
-        alphas = grads_sq / denom
-        weights = tf.reduce_sum(alphas * tf.nn.relu(grads), axis=(0, 1))
-        heatmap = tf.reduce_sum(conv_outputs * weights, axis=-1)
-        heatmap = tf.maximum(heatmap, 0)
-        heatmap = (heatmap / (tf.reduce_max(heatmap) + 1e-8)).numpy()
-        return heatmap
-    except Exception as e:
-        st.warning(f"Grad-CAM skipped: {e}")
-        return None
-
-def build_gradcam_figure(original_pil, heatmap):
-    original = np.array(original_pil.convert("RGB").resize(IMG_SIZE))
-    heatmap_resized = cv2.resize(heatmap, (IMG_SIZE[1], IMG_SIZE[0]))
-    heatmap_resized = np.maximum(heatmap_resized, 0)
-    heatmap_resized /= np.max(heatmap_resized) + 1e-8
-    heatmap_u8 = np.uint8(255 * heatmap_resized)
-    heatmap_u8 = cv2.GaussianBlur(heatmap_u8, (31, 31), 0)
-    heatmap_color = cv2.applyColorMap(heatmap_u8, cv2.COLORMAP_JET)
-    heatmap_color = cv2.cvtColor(heatmap_color, cv2.COLOR_BGR2RGB)
-    overlay = cv2.addWeighted(original, 0.65, heatmap_color, 0.35, 0)
-
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-    fig.patch.set_facecolor('#111827')
-    titles = ["Original", "Grad-CAM++ Heatmap", "Overlay"]
-    imgs   = [original, heatmap_resized, overlay]
-    cmaps  = [None, 'jet', None]
-    for ax, title, img, cmap in zip(axes, titles, imgs, cmaps):
-        ax.imshow(img, cmap=cmap)
-        ax.set_title(title, color='#94a3b8', fontsize=10, pad=8)
-        ax.axis('off')
-        for spine in ax.spines.values():
-            spine.set_visible(False)
-    plt.tight_layout(pad=1.5)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=130, bbox_inches='tight', facecolor='#111827')
-    plt.close()
-    buf.seek(0)
-    return buf
-
-def llm_explain(disease, confidence, tokenizer, llm):
-    if llm is None:
-        return _fallback_explain(disease, confidence)
-
-    prompt = f"""You are an ophthalmology AI assistant.
-Write exactly 5 concise medical sentences about this eye scan prediction.
+Write exactly 5 short medical lines about this eye disease prediction:
 
 Prediction: {disease}
-Confidence: {confidence:.0%}
+Confidence: {confidence:.1f}%
 
-Format (5 lines only, no titles, no extra text):
-1. State the prediction and confidence.
-2. Brief definition of the condition.
-3. Common symptoms the patient may experience.
-4. Severity level and urgency.
-5. Recommended next step for the patient.
-"""
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
-    with torch.no_grad():
-        outputs = llm.generate(
-            **inputs,
-            max_new_tokens=150,
-            temperature=0.1,
-            do_sample=False,
-            repetition_penalty=1.2
-        )
-    text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    cleaned = text.replace(prompt, "").strip()
-    lines = [l.strip() for l in cleaned.split("\n") if l.strip()]
-    return lines[:5]
+Structure (5 lines only, no headers, no repetition):
+1. Prediction statement.
+2. Short clinical definition.
+3. Key symptoms the patient may notice.
+4. Severity level (Mild / Moderate / Severe / Emergency).
+5. Recommended next step."""
 
-def _fallback_explain(disease, confidence):
-    info = {
-        'Diabetic Retinopathy': [
-            f"1. The model detected Diabetic Retinopathy with {confidence:.0%} confidence.",
-            "2. Diabetic Retinopathy is retinal damage caused by poorly controlled blood sugar.",
-            "3. Symptoms include blurred vision, floaters, and dark areas in sight.",
-            "4. Severity: High — can lead to blindness if untreated.",
-            "5. Consult an ophthalmologist urgently for retinal evaluation and treatment."
-        ],
-        'Disc Edema': [
-            f"1. The model detected Disc Edema with {confidence:.0%} confidence.",
-            "2. Disc Edema (papilledema) is swelling of the optic nerve head.",
-            "3. Symptoms include headaches, visual disturbances, and nausea.",
-            "4. Severity: High — may indicate elevated intracranial pressure.",
-            "5. Urgent neurological and ophthalmological evaluation is needed."
-        ],
-        'Healthy': [
-            f"1. The model found no signs of disease with {confidence:.0%} confidence.",
-            "2. A healthy retina shows normal optic disc and blood vessel patterns.",
-            "3. No abnormal symptoms expected.",
-            "4. Severity: Normal — no immediate concern.",
-            "5. Continue routine annual eye check-ups."
-        ],
-        'Myopia': [
-            f"1. The model detected Myopia (nearsightedness) with {confidence:.0%} confidence.",
-            "2. Myopia is a refractive error causing difficulty seeing distant objects.",
-            "3. Symptoms include blurred distance vision and eye strain.",
-            "4. Severity: Moderate — manageable with corrective lenses.",
-            "5. Visit an optometrist for prescription glasses or contact lenses."
-        ],
-        'Pterygium': [
-            f"1. The model detected Pterygium with {confidence:.0%} confidence.",
-            "2. Pterygium is a fleshy growth on the conjunctiva that may extend onto the cornea.",
-            "3. Symptoms include redness, irritation, and blurred vision if it covers the pupil.",
-            "4. Severity: Moderate — surgical removal may be needed if vision is affected.",
-            "5. See an ophthalmologist to monitor growth and discuss treatment options."
-        ],
-        'Retinal Detachment': [
-            f"1. The model detected Retinal Detachment with {confidence:.0%} confidence.",
-            "2. Retinal Detachment occurs when the retina separates from the eye wall.",
-            "3. Symptoms include sudden flashes of light, floaters, and shadow in vision.",
-            "4. Severity: CRITICAL — a medical emergency requiring immediate treatment.",
-            "5. Go to an emergency eye clinic IMMEDIATELY — delay can cause permanent blindness."
-        ],
-        'Retinitis Pigmentosa': [
-            f"1. The model detected Retinitis Pigmentosa with {confidence:.0%} confidence.",
-            "2. Retinitis Pigmentosa is a genetic disorder causing progressive retinal degeneration.",
-            "3. Symptoms include night blindness and tunnel vision worsening over time.",
-            "4. Severity: High — currently no cure, but progression can be managed.",
-            "5. Consult a retinal specialist for genetic counseling and management strategies."
-        ],
+
+# ==============================
+# Ollama LLM Helpers
+# ==============================
+def _clean_lines(text: str) -> str:
+    """Return the first 5 non-empty lines of *text*."""
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    return "\n".join(lines[:5])
+
+
+def _explain_via_ollama(disease: str, confidence: float, ollama_model: str, ollama_url: str) -> str:
+    prompt = PROMPT_TEMPLATE.format(disease=disease, confidence=confidence * 100)
+    payload = {
+        "model": ollama_model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 120,
+            "repeat_penalty": 1.2,
+            "num_ctx": 512,
+        },
     }
-    return info.get(disease, [
-        f"1. Prediction: {disease} ({confidence:.0%} confidence).",
-        "2. Condition detected by AI analysis.",
-        "3. Consult a specialist for proper evaluation.",
-        "4. Severity to be determined by clinician.",
-        "5. Schedule an appointment with an ophthalmologist."
-    ])
+    api_url = f"{ollama_url.rstrip('/')}/api/generate"
+    response = requests.post(api_url, json=payload, timeout=180)
+    response.raise_for_status()
+    raw = response.json().get("response", "").strip()
+    return _clean_lines(raw)
 
-# ─────────────────────────────────────────────
-# PDF Report Generator
-# ─────────────────────────────────────────────
-def generate_pdf_report(disease, confidence, severity_label, report_lines, all_probs, pil_img=None):
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=letter,
-        rightMargin=0.75 * inch,
-        leftMargin=0.75 * inch,
-        topMargin=0.75 * inch,
-        bottomMargin=0.75 * inch,
+
+def _test_ollama_connection(ollama_url: str) -> tuple[bool, str]:
+    """Return (success, message) after pinging the Ollama server."""
+    try:
+        r = requests.get(ollama_url.rstrip("/"), timeout=5)
+        if r.status_code == 200:
+            return True, "✅ Ollama يعمل بنجاح!"
+        return False, f"⚠️ استجابة غير متوقعة: {r.status_code}"
+    except requests.exceptions.ConnectionError:
+        return False, "❌ لا يمكن الاتصال — تأكد أن: ollama serve يعمل"
+    except requests.exceptions.Timeout:
+        return False, "❌ انتهت المهلة — الخادم لا يستجيب"
+    except Exception as exc:
+        return False, f"❌ خطأ: {exc}"
+
+
+def local_llm_explain(
+    disease: str,
+    confidence: float,
+    ollama_model: str = "llama3",
+    ollama_url: str = "http://localhost:11434",
+) -> str:
+    """Return an LLM explanation string, or an 'ERROR: …' string on failure."""
+    try:
+        return _explain_via_ollama(disease, confidence, ollama_model, ollama_url)
+    except requests.exceptions.ConnectionError:
+        return f"ERROR: تعذّر الاتصال بـ Ollama على {ollama_url} — تأكد أن: ollama serve يعمل"
+    except requests.exceptions.Timeout:
+        return "ERROR: انتهت مهلة الاستجابة — النموذج بطيء أو غير محمّل."
+    except requests.exceptions.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "?"
+        if status == 404:
+            return f"ERROR: النموذج «{ollama_model}» غير محمّل — نفّذ: ollama pull {ollama_model}"
+        return f"ERROR: HTTP {status} — {exc}"
+    except Exception as exc:
+        return f"ERROR: خطأ غير متوقع: {exc}"
+
+
+# ==============================
+# Vision Model — Load & Cache
+# ==============================
+@st.cache_resource
+def load_model_cached():
+    """Download (if needed) and load the EfficientNetB3 model."""
+    if not os.path.exists(MODEL_PATH):
+        with st.spinner("⬇️ جاري تحميل النموذج..."):
+            gdown.download(
+                f"https://drive.google.com/uc?id={FILE_ID}",
+                MODEL_PATH,
+                quiet=False,
+            )
+
+    if not os.path.exists(MODEL_PATH):
+        st.error("❌ النموذج غير موجود — تحقق من اتصالك بالإنترنت.")
+        st.stop()
+
+    if os.path.getsize(MODEL_PATH) < 5_000_000:
+        st.error("❌ ملف النموذج تالف — احذفه وأعد تشغيل التطبيق.")
+        st.stop()
+
+    try:
+        return load_model(MODEL_PATH)
+    except Exception as exc:
+        st.error(f"❌ فشل تحميل النموذج: {exc}")
+        st.stop()
+
+
+# ==============================
+# Image Processing Helpers
+# ==============================
+def preprocess(img: Image.Image) -> np.ndarray:
+    """Resize and preprocess a PIL image for EfficientNetB3."""
+    img = img.resize((300, 300))
+    arr = np.array(img)
+    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
+    return np.expand_dims(arr, axis=0)
+
+
+def predict(img: Image.Image, model) -> tuple[str, float, np.ndarray]:
+    """Return (class_name, confidence, all_probabilities)."""
+    preds = model.predict(preprocess(img))
+    idx = int(np.argmax(preds[0]))
+    return CLASS_NAMES[idx], float(np.max(preds)), preds[0]
+
+
+def gradcam(img: Image.Image, model) -> np.ndarray:
+    """Compute a Grad-CAM heatmap (BGR, uint8) for the top predicted class."""
+    arr = np.array(img.resize((300, 300)))
+    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
+    arr = np.expand_dims(arr, axis=0)
+
+    target_layer = next(
+        (layer for layer in reversed(model.layers) if isinstance(layer, tf.keras.layers.Conv2D)),
+        None,
     )
 
-    DARK      = colors.HexColor("#0a0e1a")
-    SURFACE   = colors.HexColor("#111827")
-    ACCENT    = colors.HexColor("#00d4ff")
-    ACCENT2   = colors.HexColor("#7c3aed")
-    TEXT      = colors.HexColor("#e2e8f0")
-    MUTED     = colors.HexColor("#64748b")
-    _, sev_hex = DISEASE_INFO.get(disease, ('Unknown', '#94a3b8'))
-    SEV_COLOR = colors.HexColor(sev_hex)
-
-    base = getSampleStyleSheet()
-
-    title_style = ParagraphStyle(
-        "ReportTitle", parent=base["Normal"],
-        fontSize=22, textColor=ACCENT, alignment=TA_CENTER,
-        spaceAfter=4, fontName="Helvetica-Bold",
-    )
-    subtitle_style = ParagraphStyle(
-        "ReportSubtitle", parent=base["Normal"],
-        fontSize=9, textColor=MUTED, alignment=TA_CENTER, spaceAfter=2,
-    )
-    section_style = ParagraphStyle(
-        "Section", parent=base["Normal"],
-        fontSize=11, textColor=ACCENT, fontName="Helvetica-Bold",
-        spaceBefore=14, spaceAfter=6,
-    )
-    body_style = ParagraphStyle(
-        "Body", parent=base["Normal"],
-        fontSize=10, textColor=TEXT, leading=15, spaceAfter=4,
-    )
-    small_style = ParagraphStyle(
-        "Small", parent=base["Normal"],
-        fontSize=8, textColor=MUTED, alignment=TA_CENTER, spaceBefore=20,
+    grad_model = tf.keras.models.Model(
+        inputs=model.inputs,
+        outputs=[target_layer.output, model.output],
     )
 
-    story = []
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(arr)
 
-    story.append(Paragraph("👁  Eye Disease AI Diagnostics", title_style))
-    story.append(Paragraph("EfficientNetB3 · Grad-CAM++ · AI Medical Report", subtitle_style))
-    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d  %H:%M:%S')}", subtitle_style))
-    story.append(HRFlowable(width="100%", thickness=1, color=ACCENT, spaceAfter=10))
+        if isinstance(predictions, list):
+            predictions = predictions[0]
 
-    story.append(Paragraph("Diagnosis Summary", section_style))
-    diag_data = [
-        ["Predicted Condition", disease],
-        ["Confidence",          f"{confidence:.1%}"],
-        ["Severity",            severity_label],
-    ]
-    diag_table = Table(diag_data, colWidths=[2.2 * inch, 4.3 * inch])
-    diag_table.setStyle(TableStyle([
-        ("BACKGROUND",     (0, 0), (0, -1), SURFACE),
-        ("BACKGROUND",     (1, 0), (1, -1), DARK),
-        ("TEXTCOLOR",      (0, 0), (0, -1), MUTED),
-        ("TEXTCOLOR",      (1, 0), (1, 0),  ACCENT),
-        ("TEXTCOLOR",      (1, 1), (1, 1),  ACCENT2),
-        ("TEXTCOLOR",      (1, 2), (1, 2),  SEV_COLOR),
-        ("FONTNAME",       (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE",       (0, 0), (-1, -1), 10),
-        ("FONTNAME",       (1, 0), (1, 0),  "Helvetica-Bold"),
-        ("PADDING",        (0, 0), (-1, -1), 8),
-        ("GRID",           (0, 0), (-1, -1), 0.5, colors.HexColor("#1c2536")),
-        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [SURFACE, DARK]),
-    ]))
-    story.append(diag_table)
+        if predictions.shape[-1] == 1:
+            loss = predictions[:, 0]
+        else:
+            class_idx = int(tf.argmax(predictions[0]).numpy())
+            loss = predictions[:, class_idx]
 
-    story.append(Paragraph("AI Medical Report", section_style))
-    for i, line in enumerate(report_lines, 1):
-        text = line.lstrip("0123456789. ").strip()
-        story.append(Paragraph(f"<b>{i}.</b>  {text}", body_style))
+    grads = tape.gradient(loss, conv_outputs)
+    grads = grads / (tf.reduce_mean(tf.abs(grads)) + 1e-8)
 
-    story.append(Paragraph("Class Probabilities", section_style))
-    sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
-    prob_data = [["Condition", "Probability"]]
-    for cls, prob in sorted_probs:
-        prob_data.append([cls, f"{prob:.1%}"])
+    weights = tf.reduce_mean(grads, axis=(1, 2))
+    cam = tf.reduce_sum(weights[:, None, None, :] * conv_outputs, axis=-1)[0].numpy()
 
-    prob_table = Table(prob_data, colWidths=[4 * inch, 2.5 * inch])
-    prob_table.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, 0),  ACCENT2),
-        ("TEXTCOLOR",     (0, 0), (-1, 0),  colors.white),
-        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
-        ("BACKGROUND",    (0, 1), (-1, -1), DARK),
-        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [DARK, SURFACE]),
-        ("TEXTCOLOR",     (0, 1), (-1, -1), TEXT),
-        ("FONTSIZE",      (0, 0), (-1, -1), 9),
-        ("PADDING",       (0, 0), (-1, -1), 7),
-        ("GRID",          (0, 0), (-1, -1), 0.4, colors.HexColor("#1c2536")),
-        *[("TEXTCOLOR",   (0, i + 1), (-1, i + 1), ACCENT)
-          for i, (cls, _) in enumerate(sorted_probs) if cls == disease],
-    ]))
-    story.append(prob_table)
+    cam = np.maximum(cam, 0)
+    if np.max(cam) > 0:
+        cam /= np.max(cam)
 
-    story.append(HRFlowable(width="100%", thickness=0.5, color=MUTED, spaceBefore=20))
-    story.append(Paragraph(
-        "⚠  This report is generated by an AI model for informational purposes only. "
-        "It is not a substitute for professional medical advice, diagnosis, or treatment. "
-        "Always consult a qualified ophthalmologist.",
-        small_style,
-    ))
+    cam = np.power(cam, 0.3)
+    cam = cv2.resize(cam, (300, 300))
+    return cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
 
-    doc.build(story)
-    buf.seek(0)
-    return buf.read()
 
-# ─────────────────────────────────────────────
-# UI
-# ─────────────────────────────────────────────
+def overlay_heatmap(img: Image.Image, heatmap: np.ndarray) -> np.ndarray:
+    """Blend the original image with the Grad-CAM heatmap."""
+    arr = np.array(img.resize((300, 300)))
+    return cv2.addWeighted(arr, 0.75, heatmap, 0.25, 0)
+
+
+# ==============================
+# Hero Section
+# ==============================
 st.markdown("""
-<div class="header-block">
-    <p class="header-title">👁 Eye Disease AI Diagnostics</p>
-    <p class="header-sub">EfficientNetB3 · Grad-CAM++ · Phi-3 Medical Report · 7 Disease Classes</p>
+<div class="hero">
+    <h1 class="hero-title">Assistant For Detection Of <span>Retinal Diseases</span></h1>
 </div>
+<div class="divider"></div>
 """, unsafe_allow_html=True)
 
+# ==============================
+# Load Model
+# ==============================
+model = load_model_cached()
+
+# ==============================
+# Sidebar — Ollama LLM Settings
+# ==============================
 with st.sidebar:
-    st.markdown("### ⚙️ Settings")
-    show_gradcam   = st.toggle("Show Grad-CAM++ Heatmap", value=True)
-    show_all_probs = st.toggle("Show All Class Probabilities", value=False)
-    use_llm        = st.toggle("Use Phi-3 LLM for Report", value=False,
-                               help="Slower but more dynamic explanations. Requires GPU for best performance.")
+    st.markdown("""
+    <div style="font-family:'Syne',sans-serif; font-size:1rem; font-weight:700;
+                color:#16a34a; margin-bottom:1rem; padding-bottom:0.5rem;
+                border-bottom:2px solid rgba(22,163,74,0.25);">
+        🤖 إعدادات الشرح الذكي (Ollama)
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.markdown("**📋 Supported Conditions**")
-    for name in CLASS_NAMES:
-        severity, color = DISEASE_INFO[name]
-        st.markdown(f"<span style='color:{color};font-size:0.8rem'>● {name}</span>", unsafe_allow_html=True)
+    enable_llm = st.toggle("🔘 تفعيل شرح LLM", value=True)
 
-    st.markdown("---")
-    st.caption("Model: EfficientNetB3 · Input: 300×300px")
+    ollama_model = st.selectbox(
+        "نموذج Ollama",
+        options=["llama3", "mistral", "phi3", "gemma", "llama2", "neural-chat"],
+        index=0,
+        help="تأكد أن النموذج محمّل: ollama pull <model>",
+    )
 
-# Load models
-vision_model = load_vision_model()
+    ollama_url = st.text_input(
+        "Ollama URL",
+        value="http://localhost:11434",
+        help="الرابط الافتراضي لـ Ollama",
+    )
 
-tokenizer, llm = None, None
-if use_llm:
-    with st.spinner("Loading Phi-3 LLM..."):
-        tokenizer, llm = load_llm()
+    if st.button("🔌 اختبار الاتصال بـ Ollama", use_container_width=True):
+        ok, msg = _test_ollama_connection(ollama_url)
+        (st.success if ok else st.error)(msg)
 
-col1, col2 = st.columns([1, 1.3], gap="large")
+    st.markdown("""
+    <div style="margin-top:1rem; font-size:0.75rem; color:#4b7a5e; line-height:2;">
+        <span style="color:#15803d; font-weight:500;">تشغيل Ollama:</span><br>
+        <code style="background:rgba(22,163,74,0.1); color:#15803d;
+                     padding:0.15rem 0.5rem; border-radius:4px;">ollama serve</code>
+        <br><br>
+        <span style="color:#15803d; font-weight:500;">تحميل نموذج:</span><br>
+        <code style="background:rgba(22,163,74,0.1); color:#15803d;
+                     padding:0.15rem 0.5rem; border-radius:4px;">ollama pull llama3</code>
+    </div>
+    """, unsafe_allow_html=True)
 
-with col1:
-    st.markdown("#### 🖼 Upload Retinal Image")
+
+# ==============================
+# Main Layout — 3 Columns
+# ==============================
+diseases_col, left_col, right_col = st.columns([1, 1.1, 1.8], gap="medium")
+
+# ── Column 1: Detectable Diseases Panel ──
+with diseases_col:
+    st.markdown("""
+    <div style="font-family:'Syne',sans-serif; font-size:0.9rem; font-weight:700;
+                color:#16a34a; margin-bottom:0.9rem; padding-bottom:0.5rem;
+                border-bottom:2px solid rgba(22,163,74,0.25);">
+        🔬 الأمراض المكتشفة
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0.45rem;">
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #ef4444;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">🩺</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Diabetic Retinopathy</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">اعتلال الشبكية السكري</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #ef4444;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">🧠</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Disc Edema</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">وذمة القرص البصري</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #22c55e;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">✅</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Healthy</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">شبكية سليمة</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #f59e0b;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">👓</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Myopia</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">قِصَر النظر</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #f59e0b;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">🔬</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Pterygium</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">الظفرة</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #dc2626;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">🚨</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Retinal Detachment</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">انفصال الشبكية</div>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.55rem; background:#fff;
+                    border:1px solid #bbf7d0; border-left:4px solid #ef4444;
+                    border-radius:10px; padding:0.5rem 0.7rem;">
+            <span style="font-size:1rem;">🧬</span>
+            <div>
+                <div style="font-size:0.78rem; font-weight:600; color:#14532d;">Retinitis Pigmentosa</div>
+                <div style="font-size:0.66rem; color:#6aaa85;">التهاب الشبكية الصباغي</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ── Column 2: Image Upload ──
+with left_col:
+    st.markdown('<div class="upload-label">رفع صورة العين</div>', unsafe_allow_html=True)
+    st.markdown('<div class="upload-hint">الصيغ المدعومة: JPG · PNG</div>', unsafe_allow_html=True)
+    st.markdown('<br>', unsafe_allow_html=True)
+
     uploaded_file = st.file_uploader(
-        "JPG, PNG, JPEG supported",
+        label="اختر صورة",
         type=["jpg", "jpeg", "png"],
-        label_visibility="collapsed"
+        label_visibility="collapsed",
     )
 
     if uploaded_file:
-        pil_img = Image.open(uploaded_file)
-        st.image(pil_img, caption="Uploaded Image", use_container_width=True)
-        analyze_btn = st.button("🔍 Analyze Image", use_container_width=True)
+        image = Image.open(uploaded_file).convert("RGB")
+        thumb = image.copy()
+        thumb.thumbnail((210, 210))
+        st.markdown('<div class="img-card">', unsafe_allow_html=True)
+        st.image(thumb, use_container_width=False, width=220)
+        st.markdown('<div class="img-card-label">الصورة الأصلية</div></div>', unsafe_allow_html=True)
     else:
-        st.info("Upload a retinal scan image to begin diagnosis.")
-        analyze_btn = False
-
-with col2:
-    if uploaded_file and analyze_btn:
-        if vision_model is None:
-            st.error("Vision model not loaded. Please check `best_efficientnetb3.keras` or `model.h5`.")
-        else:
-            with st.spinner("Running EfficientNetB3 inference..."):
-                img_array = preprocess_image(pil_img)
-                disease, confidence, all_probs = predict_disease(img_array, vision_model)
-
-            severity_label, severity_color = DISEASE_INFO.get(disease, ('Unknown', '#94a3b8'))
-
-            st.markdown("#### 🩺 Diagnosis Result")
-            st.markdown(f"""
-<div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="color:#94a3b8;font-size:0.85rem">PREDICTED CONDITION</span>
-        <span style="color:{severity_color};font-size:0.82rem;background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:100px;border:1px solid {severity_color}40">{severity_label}</span>
-    </div>
-    <div class="disease-badge">{disease}</div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-        <span style="color:#94a3b8;font-size:0.8rem">Confidence</span>
-        <span style="font-family:'Space Mono',monospace;color:#00d4ff;font-size:0.85rem">{confidence:.1%}</span>
-    </div>
-    <div class="conf-bar-bg">
-        <div class="conf-bar-fill" style="width:{confidence*100:.1f}%"></div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-            if show_all_probs:
-                st.markdown("**All Class Probabilities**")
-                sorted_probs = sorted(all_probs.items(), key=lambda x: x[1], reverse=True)
-                for cls, prob in sorted_probs:
-                    bar_w = int(prob * 100)
-                    highlight = "color:#00d4ff;" if cls == disease else ""
-                    st.markdown(f"""
-<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-    <span style="font-size:0.78rem;{highlight}min-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{cls}</span>
-    <div style="background:#1e293b;border-radius:100px;height:6px;flex:1;overflow:hidden">
-        <div style="width:{bar_w}%;height:100%;background:{'#00d4ff' if cls == disease else '#475569'};border-radius:100px"></div>
-    </div>
-    <span style="font-family:'Space Mono',monospace;font-size:0.75rem;{highlight}min-width:40px;text-align:right">{prob:.1%}</span>
-</div>
-""", unsafe_allow_html=True)
-
-            st.markdown("#### 📋 AI Medical Report")
-            with st.spinner("Generating medical explanation..."):
-                report_lines = llm_explain(disease, confidence, tokenizer, llm)
-
-            report_html = ""
-            for i, line in enumerate(report_lines, 1):
-                text = line.lstrip("0123456789. ").strip()
-                report_html += f"""
-<div class="report-line">
-    <span class="line-num">{i}.</span>
-    <span class="line-text">{text}</span>
-</div>"""
-            st.markdown(f'<div class="card">{report_html}</div>', unsafe_allow_html=True)
-
-            st.markdown("#### 📥 Download Report")
-            pdf_bytes = generate_pdf_report(
-                disease, confidence, severity_label, report_lines, all_probs, pil_img
-            )
-            st.download_button(
-                label="⬇️ Download PDF Report",
-                data=pdf_bytes,
-                file_name=f"eye_diagnosis_{disease.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-
-            if show_gradcam:
-                st.markdown("#### 🔥 Grad-CAM++ Visualization")
-                with st.spinner("Computing saliency map..."):
-                    heatmap = generate_gradcam(img_array, vision_model)
-                if heatmap is not None:
-                    buf = build_gradcam_figure(pil_img, heatmap)
-                    st.image(buf, use_container_width=True)
-                    st.caption("Highlighted regions show areas the model focused on for the prediction.")
-
-    elif not uploaded_file:
         st.markdown("""
-<div class="card" style="text-align:center;padding:3rem 1.5rem;border:1px dashed rgba(255,255,255,0.08)">
-    <div style="font-size:3rem;margin-bottom:1rem">👁</div>
-    <div style="color:#94a3b8;font-size:0.95rem">Results will appear here after analysis</div>
-    <div style="color:#475569;font-size:0.8rem;margin-top:0.5rem">Upload an image and click Analyze</div>
+        <div class="upload-section">
+            <div style="font-size:2.5rem; margin-bottom:0.75rem; opacity:0.5">👁️</div>
+            <div style="font-size:0.88rem; color:#6aaa85;">اسحب وأفلت الصورة هنا<br>أو انقر للاختيار</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ── Column 3: Analysis Results ──
+with right_col:
+    if uploaded_file:
+        with st.spinner("🔍 جاري التحليل..."):
+            pred, conf, all_preds = predict(image, model)
+            heatmap  = gradcam(image, model)
+            overlay  = overlay_heatmap(image, heatmap)
+
+        color = SEVERITY_COLOR.get(pred, "#38bdf8")
+        info  = DISEASE_INFO.get(pred, {})
+
+        # ── Diagnosis Result ──
+        st.markdown(f"""
+        <div style="margin-bottom:1.5rem;">
+            <div style="font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
+                        color:#6aaa85; margin-bottom:0.6rem;">نتيجة التشخيص</div>
+            <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
+                <span style="font-size:1.8rem;">{info.get('icon', '🔬')}</span>
+                <span style="font-family:'Syne',sans-serif; font-size:1.6rem; font-weight:800;
+                             color:{color}; letter-spacing:-0.01em;">{pred}</span>
+            </div>
+            <div class="confidence-label">مستوى الثقة</div>
+            <div class="confidence-value">{conf * 100:.1f}<span>%</span></div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.progress(int(conf * 100))
+
+        # ── Disease Info Card ──
+        if info:
+            st.markdown(f"""
+            <div class="disease-card">
+                <div class="disease-card-title">📋 عن هذه الحالة</div>
+                <div class="disease-card-text">{info['desc']}</div>
+                <div style="margin-top:0.7rem; padding-top:0.7rem;
+                             border-top:1px solid rgba(56,189,248,0.1);">
+                    <span style="font-size:0.75rem; color:#16a34a; font-weight:600;">التوصية: </span>
+                    <span class="disease-card-text">{info['action']}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── LLM Explanation (Ollama) ──
+        if enable_llm:
+            with st.spinner(f"🤖 جاري توليد الشرح الطبي عبر Ollama ({ollama_model})..."):
+                llm_result = local_llm_explain(pred, conf, ollama_model=ollama_model, ollama_url=ollama_url)
+
+            if llm_result.startswith("ERROR:"):
+                error_msg = llm_result.replace("ERROR:", "").strip()
+                st.markdown(f"""
+                <div class="llm-card">
+                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Ollama ({ollama_model})</div>
+                    <div class="llm-error">⚠️ {error_msg}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                lines_html = "".join(
+                    f'<div class="llm-line">{line}</div>'
+                    for line in llm_result.split("\n")
+                    if line.strip()
+                )
+                st.markdown(f"""
+                <div class="llm-card">
+                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Ollama ({ollama_model})</div>
+                    {lines_html}
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ── Grad-CAM Visualisation ──
+        st.markdown('<br>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
+                    color:#6aaa85; margin-bottom:0.75rem;">التحليل البصري — Grad-CAM</div>
+        """, unsafe_allow_html=True)
+
+        v1, v2 = st.columns(2)
+        with v1:
+            st.markdown('<div class="img-card">', unsafe_allow_html=True)
+            st.image(heatmap, width=200, channels="BGR")
+            st.markdown('<div class="img-card-label">خريطة الحرارة</div></div>', unsafe_allow_html=True)
+        with v2:
+            st.markdown('<div class="img-card">', unsafe_allow_html=True)
+            st.image(overlay, width=200, channels="BGR")
+            st.markdown('<div class="img-card-label">الصورة المدمجة</div></div>', unsafe_allow_html=True)
+
+        # ── All Class Probabilities ──
+        with st.expander("📊 جميع الاحتمالات"):
+            for i in np.argsort(all_preds)[::-1]:
+                pct       = float(all_preds[i]) * 100
+                bar_color = color if CLASS_NAMES[i] == pred else "#bbf7d0"
+                st.markdown(f"""
+                <div style="display:flex; align-items:center; gap:0.75rem;
+                             margin-bottom:0.5rem; font-size:0.82rem;">
+                    <div style="width:160px; color:#4b7a5e; white-space:nowrap;
+                                overflow:hidden; text-overflow:ellipsis;">{CLASS_NAMES[i]}</div>
+                    <div style="flex:1; background:#dcfce7; border-radius:999px; height:6px; overflow:hidden;">
+                        <div style="width:{pct:.1f}%; height:100%;
+                                    background:{bar_color}; border-radius:999px;"></div>
+                    </div>
+                    <div style="width:44px; text-align:right; color:#6aaa85;">{pct:.1f}%</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+        <div style="display:flex; flex-direction:column; align-items:center;
+                    justify-content:center; height:300px; opacity:0.4; text-align:center;">
+            <div style="font-size:3rem; margin-bottom:1rem;">🔬</div>
+            <div style="font-family:'Syne',sans-serif; font-size:1.1rem; font-weight:600; color:#15803d;">
+                في انتظار صورة للتحليل
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ==============================
+# Medical Disclaimer
+# ==============================
+st.markdown("""
+<div class="disclaimer">
+    ⚠️ <strong>تنبيه طبي:</strong> هذا النظام أداةٌ مساعدة للفحص الأولي ولا يُغني عن استشارة طبيب متخصص.
+    يُرجى مراجعة طبيب عيون معتمد للتشخيص النهائي والعلاج المناسب.
 </div>
 """, unsafe_allow_html=True)
