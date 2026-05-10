@@ -1,35 +1,20 @@
-"""
-╔══════════════════════════════════════════════════════════════╗
-║     Assistant For Detection Of Retinal Diseases              ║
-║     Built with Streamlit · EfficientNetB3 · Grad-CAM · Grok ║
-╚══════════════════════════════════════════════════════════════╝
-"""
-
-# ==============================
-# Imports
-# ==============================
 import os
-
-import cv2
-import gdown
-import numpy as np
 import requests
 import streamlit as st
+import numpy as np
+import cv2
+import gdown
 import tensorflow as tf
-from PIL import Image
 from tensorflow.keras.models import load_model
-
+from PIL import Image
 
 # ==============================
-# Page Configuration
+# Page Config
 # ==============================
 st.set_page_config(
     page_title="Assistant For Detection Of Retinal Diseases",
-    page_icon="👁️",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
-
 
 # ==============================
 # Custom CSS
@@ -40,10 +25,12 @@ st.markdown("""
 
     html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 
+    /* MEDICAL GREEN — LIGHT MODE */
     html, body, [class*="css"], .stApp, .main {
         background-color: #f0fdf4 !important;
         color: #166534 !important;
     }
+
     .stApp {
         background: linear-gradient(150deg, #f0fdf4 0%, #dcfce7 40%, #f0fdf4 100%) !important;
         color: #166534;
@@ -52,7 +39,7 @@ st.markdown("""
     #MainMenu, footer, header { visibility: hidden; }
     .block-container { padding: 0 2rem 4rem; max-width: 1200px; }
 
-    /* ── Hero ── */
+    /* Hero */
     .hero {
         position: relative;
         text-align: center;
@@ -72,25 +59,16 @@ st.markdown("""
     .hero-title {
         font-family: 'Syne', sans-serif;
         font-size: clamp(2.4rem, 5vw, 4rem);
-        font-weight: 800;
-        line-height: 1.05;
-        letter-spacing: -0.02em;
-        color: #14532d;
-        margin: 0 0 1rem;
+        font-weight: 800; line-height: 1.05;
+        letter-spacing: -0.02em; color: #14532d; margin: 0 0 1rem;
     }
     .hero-title span {
         background: linear-gradient(135deg, #16a34a 0%, #15803d 60%, #4ade80 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
     .hero-subtitle {
-        font-size: 1rem;
-        font-weight: 300;
-        color: #4b7a5e;
-        max-width: 600px;
-        margin: 0 auto;
-        line-height: 1.75;
+        font-size: 1rem; font-weight: 300; color: #4b7a5e;
+        max-width: 600px; margin: 0 auto; line-height: 1.75;
         text-align: center;
     }
     .divider {
@@ -99,14 +77,12 @@ st.markdown("""
         margin: 0 0 2.5rem;
     }
 
-    /* ── Upload Section ── */
+    /* Upload */
     .upload-section {
         background: #ffffff;
         border: 2px dashed rgba(22,163,74,0.35);
-        border-radius: 20px;
-        padding: 2.5rem 2rem;
-        text-align: center;
-        margin-bottom: 2rem;
+        border-radius: 20px; padding: 2.5rem 2rem;
+        text-align: center; margin-bottom: 2rem;
         transition: all 0.2s ease;
         box-shadow: 0 2px 12px rgba(22,163,74,0.07);
     }
@@ -116,11 +92,8 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(22,163,74,0.12);
     }
     .upload-label {
-        font-family: 'Syne', sans-serif;
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #15803d;
-        margin-bottom: 0.4rem;
+        font-family: 'Syne', sans-serif; font-size: 1.1rem;
+        font-weight: 600; color: #15803d; margin-bottom: 0.4rem;
     }
     .upload-hint { font-size: 0.82rem; color: #6aaa85; }
 
@@ -128,7 +101,7 @@ st.markdown("""
     [data-testid="stFileUploader"] > div { border: none !important; background: transparent !important; padding: 0 !important; }
     [data-testid="stFileUploader"] label { color: #16a34a !important; font-size: 0.9rem; }
 
-    /* ── Image Cards ── */
+    /* Image Cards */
     .img-card {
         background: #ffffff;
         border: 1px solid #bbf7d0;
@@ -140,13 +113,11 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(22,163,74,0.1);
     }
     .img-card-label {
-        font-size: 0.68rem;
-        font-weight: 600;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: #6aaa85;
-        margin-top: 0.5rem;
+        font-size: 0.68rem; font-weight: 600;
+        letter-spacing: 0.18em; text-transform: uppercase;
+        color: #6aaa85; margin-top: 0.5rem;
     }
+
     [data-testid="stImage"] img {
         border-radius: 10px;
         width: 100%;
@@ -154,66 +125,53 @@ st.markdown("""
         object-fit: cover;
     }
 
-    /* ── Widgets ── */
+    /* Widgets */
     .stSelectbox label, .stTextInput label, .stToggle label,
     .stRadio label, .stExpander summary, p, span, div {
         color: #166534 !important;
     }
-    .stSelectbox > div > div,
-    .stTextInput > div > div > input {
+    .stSelectbox > div > div, .stTextInput > div > div > input {
         background: #ffffff !important;
         border-color: #bbf7d0 !important;
         color: #14532d !important;
     }
 
-    /* ── Progress Bar ── */
+    /* Progress Bar */
     .stProgress > div > div > div > div {
         background: linear-gradient(90deg, #22c55e, #16a34a) !important;
         border-radius: 999px !important;
     }
     .stProgress > div > div {
         background: #dcfce7 !important;
-        border-radius: 999px !important;
-        height: 8px !important;
+        border-radius: 999px !important; height: 8px !important;
     }
 
-    /* ── Confidence Display ── */
+    /* Confidence */
     .confidence-label {
-        font-size: 0.78rem;
-        letter-spacing: 0.15em;
-        text-transform: uppercase;
-        color: #6aaa85;
-        margin-bottom: 0.5rem;
+        font-size: 0.78rem; letter-spacing: 0.15em;
+        text-transform: uppercase; color: #6aaa85; margin-bottom: 0.5rem;
     }
     .confidence-value {
-        font-family: 'Syne', sans-serif;
-        font-size: 2.4rem;
-        font-weight: 800;
-        color: #14532d;
-        line-height: 1;
+        font-family: 'Syne', sans-serif; font-size: 2.4rem;
+        font-weight: 800; color: #14532d; line-height: 1;
     }
     .confidence-value span { font-size: 1rem; font-weight: 400; color: #6aaa85; }
 
-    /* ── Disease Card ── */
+    /* Disease Card */
     .disease-card {
         background: #ffffff;
         border: 1px solid #bbf7d0;
         border-left: 4px solid #16a34a;
-        border-radius: 16px;
-        padding: 1.2rem 1.4rem;
-        margin-top: 1rem;
+        border-radius: 16px; padding: 1.2rem 1.4rem; margin-top: 1rem;
         box-shadow: 0 2px 16px rgba(22,163,74,0.08);
     }
     .disease-card-title {
-        font-family: 'Syne', sans-serif;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #15803d;
-        margin-bottom: 0.4rem;
+        font-family: 'Syne', sans-serif; font-size: 0.95rem;
+        font-weight: 700; color: #15803d; margin-bottom: 0.4rem;
     }
     .disease-card-text { font-size: 0.85rem; color: #4b7a5e; line-height: 1.7; }
 
-    /* ── LLM Explanation Card ── */
+    /* LLM Explanation Card */
     .llm-card {
         background: #f0fdf4;
         border: 1px solid #86efac;
@@ -224,61 +182,45 @@ st.markdown("""
         box-shadow: 0 2px 16px rgba(74,222,128,0.1);
     }
     .llm-card-title {
-        font-family: 'Syne', sans-serif;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: #16a34a;
-        margin-bottom: 0.75rem;
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
+        font-family: 'Syne', sans-serif; font-size: 0.95rem;
+        font-weight: 700; color: #16a34a; margin-bottom: 0.75rem;
+        display: flex; align-items: center; gap: 0.4rem;
     }
     .llm-line {
-        font-size: 0.86rem;
-        color: #2d6a44;
-        line-height: 1.75;
-        margin-bottom: 0.45rem;
+        font-size: 0.86rem; color: #2d6a44;
+        line-height: 1.75; margin-bottom: 0.45rem;
         padding-left: 0.6rem;
         border-left: 2px solid rgba(22,163,74,0.35);
     }
     .llm-error {
-        font-size: 0.82rem;
-        color: #b45309;
+        font-size: 0.82rem; color: #b45309;
         background: rgba(245,158,11,0.08);
         border: 1px solid rgba(245,158,11,0.3);
-        border-radius: 8px;
-        padding: 0.7rem 1rem;
+        border-radius: 8px; padding: 0.7rem 1rem;
         margin-top: 0.5rem;
     }
 
-    /* ── Disclaimer ── */
+    /* Disclaimer */
     .disclaimer {
         background: #fffbeb;
         border: 1px solid #fde68a;
         border-left: 4px solid #f59e0b;
-        border-radius: 12px;
-        padding: 0.9rem 1.2rem;
-        font-size: 0.78rem;
-        color: #92400e;
-        text-align: center;
-        margin-top: 2rem;
-        line-height: 1.65;
+        border-radius: 12px; padding: 0.9rem 1.2rem;
+        font-size: 0.78rem; color: #92400e;
+        text-align: center; margin-top: 2rem; line-height: 1.65;
     }
 
-    /* ── Sidebar ── */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%) !important;
         border-right: 2px solid #bbf7d0 !important;
     }
 
-    /* ── Expander ── */
     .stExpander {
         background: #ffffff !important;
         border: 1px solid #bbf7d0 !important;
         border-radius: 12px !important;
     }
 
-    /* ── Button ── */
     .stButton > button {
         background: linear-gradient(135deg, #16a34a, #15803d) !important;
         color: #ffffff !important;
@@ -295,75 +237,67 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # ==============================
 # Constants
 # ==============================
-MODEL_PATH  = "best_efficientnetb3.h5"
-FILE_ID     = "1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
+MODEL_PATH = "best_efficientnetb3.h5"
+FILE_ID = "1qnrKRAWa7UU5YbtT2UqGDbJij7uH6dIz"
+ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"  # not used, kept for compatibility
 
-# Grok API (xAI — OpenAI-compatible)
-GROK_API_BASE = "https://api.x.ai/v1"
-GROK_MODELS   = ["grok-3-beta", "grok-3", "grok-3-latest"]
-
-CLASS_NAMES = [
-    "Diabetic Retinopathy",
-    "Disc Edema",
-    "Healthy",
-    "Myopia",
-    "Pterygium",
-    "Retinal Detachment",
-    "Retinitis Pigmentosa",
-]
-
-SEVERITY_COLOR = {
-    "Healthy":               "#22c55e",
-    "Myopia":                "#f59e0b",
-    "Pterygium":             "#f59e0b",
-    "Diabetic Retinopathy":  "#ef4444",
-    "Disc Edema":            "#ef4444",
-    "Retinal Detachment":    "#dc2626",
-    "Retinitis Pigmentosa":  "#ef4444",
-}
-
-DISEASE_INFO = {
+# ==============================
+# Disease Info
+# ==============================
+disease_info = {
     "Diabetic Retinopathy": {
-        "desc":   "تلف في أوعية الدم الدقيقة بشبكية العين نتيجة مرض السكري. يُعدّ من الأسباب الرئيسية للعمى لدى البالغين.",
+        "desc": "تلف في أوعية الدم الدقيقة بشبكية العين نتيجة مرض السكري. يُعدّ من الأسباب الرئيسية للعمى لدى البالغين.",
         "action": "يُنصح بفحص دوري كل 6 أشهر ومراقبة مستوى السكر في الدم.",
-        "icon":   "🩺",
+        "icon": "🩺"
     },
     "Disc Edema": {
-        "desc":   "تورم في القرص البصري قد يشير إلى ارتفاع ضغط الدم داخل الجمجمة أو اضطرابات عصبية.",
+        "desc": "تورم في القرص البصري قد يشير إلى ارتفاع ضغط الدم داخل الجمجمة أو اضطرابات عصبية.",
         "action": "يتطلب تقييمًا عصبيًا عاجلاً وصور أشعة للدماغ.",
-        "icon":   "🧠",
+        "icon": "🧠"
     },
     "Healthy": {
-        "desc":   "لم يُكتشف أي مؤشر مرضي. تبدو شبكية العين سليمة وبحالة جيدة.",
+        "desc": "لم يُكتشف أي مؤشر مرضي. تبدو شبكية العين سليمة وبحالة جيدة.",
         "action": "حافظ على فحوصات دورية سنوية للعين للاطمئنان على صحتها.",
-        "icon":   "✅",
+        "icon": "✅"
     },
     "Myopia": {
-        "desc":   "قِصَر النظر: صعوبة في رؤية الأشياء البعيدة بوضوح بسبب طول محور مقلة العين.",
+        "desc": "قِصَر النظر: صعوبة في رؤية الأشياء البعيدة بوضوح بسبب طول محور مقلة العين.",
         "action": "يمكن تصحيحه بالنظارات أو العدسات اللاصقة أو جراحة الليزر.",
-        "icon":   "👓",
+        "icon": "👓"
     },
     "Pterygium": {
-        "desc":   "نسيج ليفي وعائي ينمو على سطح القرنية من الملتحمة، وقد يؤثر على الرؤية.",
+        "desc": "نسيج ليفي وعائي ينمو على سطح القرنية من الملتحمة، وقد يؤثر على الرؤية.",
         "action": "قد يحتاج إلى استئصال جراحي إذا تقدّم نحو مركز القرنية.",
-        "icon":   "🔬",
+        "icon": "🔬"
     },
     "Retinal Detachment": {
-        "desc":   "انفصال الشبكية عن طبقة الظهارة الصباغية، وهو طارئ طبي يستوجب تدخلاً فوريًا.",
+        "desc": "انفصال الشبكية عن طبقة الظهارة الصباغية، وهو طارئ طبي يستوجب تدخلاً فوريًا.",
         "action": "توجّه فورًا إلى أقرب طوارئ عيون — يمكن أن يؤدي التأخير إلى فقدان البصر نهائيًا.",
-        "icon":   "🚨",
+        "icon": "🚨"
     },
     "Retinitis Pigmentosa": {
-        "desc":   "مجموعة اضطرابات وراثية تُسبب تدهورًا تدريجيًا في خلايا الشبكية المستقبلة للضوء.",
+        "desc": "مجموعة اضطرابات وراثية تُسبب تدهورًا تدريجيًا في خلايا الشبكية المستقبلة للضوء.",
         "action": "لا يوجد علاج شافٍ حتى الآن؛ التدبير يركز على إبطاء التقدم وتحسين جودة الحياة.",
-        "icon":   "🧬",
+        "icon": "🧬"
     },
 }
 
+severity_color = {
+    "Healthy": "#22c55e",
+    "Myopia": "#f59e0b",
+    "Pterygium": "#f59e0b",
+    "Diabetic Retinopathy": "#ef4444",
+    "Disc Edema": "#ef4444",
+    "Retinal Detachment": "#dc2626",
+    "Retinitis Pigmentosa": "#ef4444",
+}
+
+# ==============================
+# LLM Explanation — Ollama
+# ==============================
 PROMPT_TEMPLATE = """You are an ophthalmology AI assistant.
 
 Write exactly 5 short medical lines about this eye disease prediction:
@@ -379,200 +313,144 @@ Structure (5 lines only, no headers, no repetition):
 5. Recommended next step."""
 
 
-# ==============================
-# Grok LLM Helpers
-# ==============================
 def _clean_lines(text: str) -> str:
-    """Return the first 5 non-empty lines of *text*."""
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    """Take first 5 non-empty lines."""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
     return "\n".join(lines[:5])
 
 
-def _explain_via_grok(disease: str, confidence: float, grok_model: str, api_key: str) -> str:
-    """Call the xAI Grok API (OpenAI-compatible) and return a cleaned 5-line explanation."""
+def _explain_via_ollama(disease: str, confidence: float, ollama_model: str, ollama_url: str) -> str:
     prompt = PROMPT_TEMPLATE.format(disease=disease, confidence=confidence * 100)
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
-    }
     payload = {
-        "model": grok_model,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 300,
-        "temperature": 0.1,
+        "model": ollama_model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.1,
+            "num_predict": 120,
+            "repeat_penalty": 1.2,
+            "num_ctx": 512,
+        },
     }
-    response = requests.post(
-        f"{GROK_API_BASE}/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=60,
-    )
+    api_url = f"{ollama_url.rstrip('/')}/api/generate"
+    response = requests.post(api_url, json=payload, timeout=180)
     response.raise_for_status()
-    raw = response.json()["choices"][0]["message"]["content"].strip()
+    raw = response.json().get("response", "").strip()
     return _clean_lines(raw)
 
 
-def _test_grok_connection(api_key: str) -> tuple[bool, str]:
-    """Ping the xAI API with a minimal request. Return (success, message)."""
-    if not api_key or not api_key.strip():
-        return False, "❌ مفتاح API فارغ — أدخل مفتاحك من console.x.ai"
+def _test_ollama_connection(ollama_url: str) -> tuple:
+    """Test connection to Ollama server."""
     try:
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key.strip()}",
-        }
-        payload = {
-            "model": "grok-3-beta",
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 5,
-        }
-        r = requests.post(
-            f"{GROK_API_BASE}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=15,
-        )
+        r = requests.get(ollama_url.rstrip("/"), timeout=5)
         if r.status_code == 200:
-            return True, "✅ Grok API يعمل بنجاح!"
-        if r.status_code == 401:
-            return False, "❌ مفتاح API غير صالح — تحقق من console.x.ai"
+            return True, "✅ Ollama يعمل بنجاح!"
         return False, f"⚠️ استجابة غير متوقعة: {r.status_code}"
     except requests.exceptions.ConnectionError:
-        return False, "❌ لا يمكن الاتصال بـ api.x.ai"
+        return False, "❌ لا يمكن الاتصال — تأكد أن: ollama serve يعمل"
     except requests.exceptions.Timeout:
         return False, "❌ انتهت المهلة — الخادم لا يستجيب"
-    except Exception as exc:
-        return False, f"❌ خطأ: {exc}"
+    except Exception as e:
+        return False, f"❌ خطأ: {e}"
 
 
-def grok_llm_explain(
+def local_llm_explain(
     disease: str,
     confidence: float,
-    grok_model: str = "grok-3-beta",
-    api_key: str = "",
+    ollama_model: str = "llama3",
+    ollama_url: str = "http://localhost:11434",
 ) -> str:
-    """Return an LLM explanation string, or an 'ERROR: …' string on failure."""
-    if not api_key or not api_key.strip():
-        return "ERROR: أدخل مفتاح xAI API في الشريط الجانبي."
     try:
-        return _explain_via_grok(disease, confidence, grok_model, api_key.strip())
+        return _explain_via_ollama(disease, confidence, ollama_model, ollama_url)
     except requests.exceptions.ConnectionError:
-        return "ERROR: تعذّر الاتصال بـ api.x.ai — تحقق من اتصالك بالإنترنت."
+        return f"ERROR: تعذّر الاتصال بـ Ollama على {ollama_url} — تأكد أن: ollama serve يعمل"
     except requests.exceptions.Timeout:
-        return "ERROR: انتهت مهلة الاستجابة — حاول مرة أخرى."
-    except requests.exceptions.HTTPError as exc:
-        status = exc.response.status_code if exc.response is not None else "?"
-        if status == 401:
-            return "ERROR: مفتاح API غير صالح — تحقق من console.x.ai"
-        if status == 429:
-            return "ERROR: تجاوزت حد الطلبات — انتظر قليلاً ثم أعد المحاولة."
-        return f"ERROR: HTTP {status} — {exc}"
-    except Exception as exc:
-        return f"ERROR: خطأ غير متوقع: {exc}"
+        return "ERROR: انتهت مهلة الاستجابة — النموذج بطيء أو غير محمّل."
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "?"
+        if status == 404:
+            return f"ERROR: النموذج «{ollama_model}» غير محمّل — نفّذ: ollama pull {ollama_model}"
+        return f"ERROR: HTTP {status} — {e}"
+    except Exception as e:
+        return f"ERROR: خطأ غير متوقع: {e}"
 
 
 # ==============================
-# Legacy Keras 2 → Keras 3 Compatibility Patch
+# Load Vision Model
 # ==============================
-def _patch_input_layer():
-    """
-    Keras 3 / TF 2.16+ removed 'batch_shape' from InputLayer.__init__.
-    Models saved with Keras 2 still store it in their JSON config, so
-    deserialization crashes with:
-        Unrecognized keyword arguments: ['batch_shape']
-
-    This monkey-patch wraps InputLayer so that 'batch_shape' is silently
-    converted to 'shape' (dropping the leading None batch dimension)
-    before the real constructor runs.
-    """
-    try:
-        original_init = tf.keras.layers.InputLayer.__init__
-
-        def _patched_input_layer_init(self, *args, **kwargs):
-    if "batch_shape" in kwargs:
-        batch_shape = kwargs.pop("batch_shape")
-        shape = tuple(batch_shape[1:]) if batch_shape[0] is None else tuple(batch_shape)
-        kwargs.setdefault("shape", shape)
-    _ORIGINAL_INPUT_LAYER_INIT(self, *args, **kwargs)  # ✅ always found
-
-tf.keras.layers.InputLayer.__init__ = _patched_input_layer_init
-
-
-_patch_input_layer()
-
-
-# ==============================
-# Vision Model — Load & Cache
-# ==============================
-def _patched_init(self, *args, **kwargs):
-    if "batch_shape" in kwargs:
-        batch_shape = kwargs.pop("batch_shape")   # remove the old arg
-        kwargs.setdefault("shape", tuple(batch_shape[1:]))  # e.g. (300,300,3)
-    original_init(self, *args, **kwargs)
-
-tf.keras.layers.InputLayer.__init__ = _patched_init
 @st.cache_resource
 def load_model_cached():
-    """Download (if needed) and load the EfficientNetB3 model."""
     if not os.path.exists(MODEL_PATH):
         with st.spinner("⬇️ جاري تحميل النموذج..."):
             gdown.download(
                 f"https://drive.google.com/uc?id={FILE_ID}",
                 MODEL_PATH,
-                quiet=False,
+                quiet=False
             )
 
     if not os.path.exists(MODEL_PATH):
-        st.error("❌ النموذج غير موجود — تحقق من اتصالك بالإنترنت.")
+        st.error("❌ النموذج غير موجود")
         st.stop()
 
     if os.path.getsize(MODEL_PATH) < 5_000_000:
-        st.error("❌ ملف النموذج تالف — احذفه وأعد تشغيل التطبيق.")
+        st.error("❌ ملف النموذج تالف")
         st.stop()
 
     try:
-        return load_model(MODEL_PATH, compile=False)
-    except Exception as exc:
-        st.error(f"❌ فشل تحميل النموذج: {exc}")
+        return load_model(MODEL_PATH)
+    except Exception as e:
+        st.error(f"❌ فشل تحميل النموذج: {e}")
         st.stop()
 
 
 # ==============================
-# Image Processing Helpers
+# Classes
 # ==============================
-def preprocess(img: Image.Image) -> np.ndarray:
-    """Resize and preprocess a PIL image for EfficientNetB3."""
+class_names = [
+    'Diabetic Retinopathy', 'Disc Edema', 'Healthy',
+    'Myopia', 'Pterygium', 'Retinal Detachment', 'Retinitis Pigmentosa'
+]
+
+# ==============================
+# Helpers
+# ==============================
+def preprocess(img):
     img = img.resize((300, 300))
     arr = np.array(img)
     arr = tf.keras.applications.efficientnet.preprocess_input(arr)
     return np.expand_dims(arr, axis=0)
 
 
-def predict(img: Image.Image, model) -> tuple[str, float, np.ndarray]:
-    """Return (class_name, confidence, all_probabilities)."""
+def predict(img, model):
     preds = model.predict(preprocess(img))
-    idx = int(np.argmax(preds[0]))
-    return CLASS_NAMES[idx], float(np.max(preds)), preds[0]
+    idx = np.argmax(preds[0])
+    return class_names[idx], float(np.max(preds)), preds[0]
 
 
-def gradcam(img: Image.Image, model) -> np.ndarray:
-    """Compute a Grad-CAM heatmap (BGR, uint8) for the top predicted class."""
+def overlay_heatmap(img, heatmap):
+    arr = np.array(img.resize((300, 300)))
+    return cv2.addWeighted(arr, 0.75, heatmap, 0.25, 0)
+
+
+def gradcam(img, model):
     arr = np.array(img.resize((300, 300)))
     arr = tf.keras.applications.efficientnet.preprocess_input(arr)
     arr = np.expand_dims(arr, axis=0)
 
     target_layer = next(
-        (layer for layer in reversed(model.layers) if isinstance(layer, tf.keras.layers.Conv2D)),
-        None,
+        (l for l in reversed(model.layers) if isinstance(l, tf.keras.layers.Conv2D)),
+        None
     )
 
     grad_model = tf.keras.models.Model(
         inputs=model.inputs,
-        outputs=[target_layer.output, model.output],
+        outputs=[target_layer.output, model.output]
     )
 
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(arr)
+        outputs = grad_model(arr)
+        conv_outputs = outputs[0]
+        predictions = outputs[1]
 
         if isinstance(predictions, list):
             predictions = predictions[0]
@@ -580,7 +458,7 @@ def gradcam(img: Image.Image, model) -> np.ndarray:
         if predictions.shape[-1] == 1:
             loss = predictions[:, 0]
         else:
-            class_idx = int(tf.argmax(predictions[0]).numpy())
+            class_idx = tf.argmax(predictions[0]).numpy()
             loss = predictions[:, class_idx]
 
     grads = tape.gradient(loss, conv_outputs)
@@ -595,89 +473,77 @@ def gradcam(img: Image.Image, model) -> np.ndarray:
 
     cam = np.power(cam, 0.3)
     cam = cv2.resize(cam, (300, 300))
+
     return cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
 
 
-def overlay_heatmap(img: Image.Image, heatmap: np.ndarray) -> np.ndarray:
-    """Blend the original image with the Grad-CAM heatmap."""
-    arr = np.array(img.resize((300, 300)))
-    return cv2.addWeighted(arr, 0.75, heatmap, 0.25, 0)
-
-
 # ==============================
-# Hero Section
+# Hero
 # ==============================
 st.markdown("""
 <div class="hero">
-    <h1 class="hero-title">Assistant For Detection Of <span>Retinal Diseases</span></h1>
+    <h1 class="hero-title">Assistant For Detection Of Retinal Diseases</h1>
 </div>
 <div class="divider"></div>
 """, unsafe_allow_html=True)
 
 # ==============================
-# Load Model
+# Load Vision Model
 # ==============================
 model = load_model_cached()
 
 # ==============================
-# Sidebar — Grok LLM Settings
+# Sidebar — LLM Settings (Ollama)
 # ==============================
 with st.sidebar:
     st.markdown("""
     <div style="font-family:'Syne',sans-serif; font-size:1rem; font-weight:700;
                 color:#16a34a; margin-bottom:1rem; padding-bottom:0.5rem;
                 border-bottom:2px solid rgba(22,163,74,0.25);">
-        🤖 إعدادات الشرح الذكي (Grok)
+        🤖 إعدادات الشرح الذكي (Ollama)
     </div>
     """, unsafe_allow_html=True)
 
     enable_llm = st.toggle("🔘 تفعيل شرح LLM", value=True)
 
-    grok_model = st.selectbox(
-        "نموذج Grok",
-        options=GROK_MODELS,
+    ollama_model = st.selectbox(
+        "نموذج Ollama",
+        options=["llama3", "mistral", "phi3", "gemma", "llama2", "neural-chat"],
         index=0,
-        help="اختر نموذج Grok من xAI",
+        help="تأكد أن النموذج محمّل: ollama pull <model>"
     )
 
-    grok_api_key = st.text_input(
-        "🔑 xAI API Key",
-        type="password",
-        placeholder="xai-xxxxxxxxxxxxxxxxxx",
-        help="احصل على مفتاحك من: console.x.ai",
+    ollama_url = st.text_input(
+        "Ollama URL",
+        value="http://localhost:11434",
+        help="الرابط الافتراضي لـ Ollama"
     )
 
-    if st.button("🔌 اختبار الاتصال بـ Grok", use_container_width=True):
-        ok, msg = _test_grok_connection(grok_api_key)
-        (st.success if ok else st.error)(msg)
+    if st.button("🔌 اختبار الاتصال بـ Ollama", use_container_width=True):
+        ok, msg = _test_ollama_connection(ollama_url)
+        if ok:
+            st.success(msg)
+        else:
+            st.error(msg)
 
     st.markdown("""
     <div style="margin-top:1rem; font-size:0.75rem; color:#4b7a5e; line-height:2;">
-        <span style="color:#15803d; font-weight:500;">للحصول على مفتاح API:</span><br>
-        <a href="https://console.x.ai" target="_blank"
-           style="color:#16a34a; text-decoration:none;">
-            🔗 console.x.ai
-        </a>
+        <span style="color:#15803d; font-weight:500;">تشغيل Ollama:</span><br>
+        <code style="background:rgba(22,163,74,0.1); color:#15803d;
+                     padding:0.15rem 0.5rem; border-radius:4px;">ollama serve</code>
         <br><br>
-        <span style="color:#15803d; font-weight:500;">النماذج المتاحة:</span><br>
+        <span style="color:#15803d; font-weight:500;">تحميل نموذج:</span><br>
         <code style="background:rgba(22,163,74,0.1); color:#15803d;
-                     padding:0.15rem 0.5rem; border-radius:4px;">grok-3-beta</code>
-        &nbsp;·&nbsp;
-        <code style="background:rgba(22,163,74,0.1); color:#15803d;
-                     padding:0.15rem 0.5rem; border-radius:4px;">grok-3</code>
-        &nbsp;·&nbsp;
-        <code style="background:rgba(22,163,74,0.1); color:#15803d;
-                     padding:0.15rem 0.5rem; border-radius:4px;">grok-3-latest</code>
+                     padding:0.15rem 0.5rem; border-radius:4px;">ollama pull llama3</code>
     </div>
     """, unsafe_allow_html=True)
 
-
 # ==============================
-# Main Layout — 3 Columns
+# Layout — 3 columns: diseases | upload | results
 # ==============================
 diseases_col, left_col, right_col = st.columns([1, 1.1, 1.8], gap="medium")
 
-# ── Column 1: Detectable Diseases Panel ──
+# ── Diseases Panel (leftmost) ──
 with diseases_col:
     st.markdown("""
     <div style="font-family:'Syne',sans-serif; font-size:0.9rem; font-weight:700;
@@ -752,8 +618,7 @@ with diseases_col:
     </div>
     """, unsafe_allow_html=True)
 
-
-# ── Column 2: Image Upload ──
+# ── Upload Column ──
 with left_col:
     st.markdown('<div class="upload-label">رفع صورة العين</div>', unsafe_allow_html=True)
     st.markdown('<div class="upload-hint">الصيغ المدعومة: JPG · PNG</div>', unsafe_allow_html=True)
@@ -762,7 +627,7 @@ with left_col:
     uploaded_file = st.file_uploader(
         label="اختر صورة",
         type=["jpg", "jpeg", "png"],
-        label_visibility="collapsed",
+        label_visibility="collapsed"
     )
 
     if uploaded_file:
@@ -780,35 +645,35 @@ with left_col:
         </div>
         """, unsafe_allow_html=True)
 
-
-# ── Column 3: Analysis Results ──
+# ── Results Column ──
 with right_col:
     if uploaded_file:
         with st.spinner("🔍 جاري التحليل..."):
             pred, conf, all_preds = predict(image, model)
-            heatmap  = gradcam(image, model)
-            overlay  = overlay_heatmap(image, heatmap)
+            heatmap = gradcam(image, model)
+            overlay = overlay_heatmap(image, heatmap)
 
-        color = SEVERITY_COLOR.get(pred, "#38bdf8")
-        info  = DISEASE_INFO.get(pred, {})
+        color = severity_color.get(pred, "#38bdf8")
+        info = disease_info.get(pred, {})
 
-        # ── Diagnosis Result ──
+        # Diagnosis
         st.markdown(f"""
         <div style="margin-bottom:1.5rem;">
             <div style="font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
                         color:#6aaa85; margin-bottom:0.6rem;">نتيجة التشخيص</div>
             <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">
-                <span style="font-size:1.8rem;">{info.get('icon', '🔬')}</span>
+                <span style="font-size:1.8rem;">{info.get('icon','🔬')}</span>
                 <span style="font-family:'Syne',sans-serif; font-size:1.6rem; font-weight:800;
                              color:{color}; letter-spacing:-0.01em;">{pred}</span>
             </div>
             <div class="confidence-label">مستوى الثقة</div>
-            <div class="confidence-value">{conf * 100:.1f}<span>%</span></div>
+            <div class="confidence-value">{conf*100:.1f}<span>%</span></div>
         </div>
         """, unsafe_allow_html=True)
+
         st.progress(int(conf * 100))
 
-        # ── Disease Info Card ──
+        # Disease Card
         if info:
             st.markdown(f"""
             <div class="disease-card">
@@ -822,33 +687,34 @@ with right_col:
             </div>
             """, unsafe_allow_html=True)
 
-        # ── LLM Explanation (Grok) ──
+        # LLM Explanation (Ollama)
         if enable_llm:
-            with st.spinner(f"🤖 جاري توليد الشرح الطبي عبر Grok ({grok_model})..."):
-                llm_result = grok_llm_explain(pred, conf, grok_model=grok_model, api_key=grok_api_key)
+            with st.spinner(f"🤖 جاري توليد الشرح الطبي عبر Ollama ({ollama_model})..."):
+                llm_result = local_llm_explain(
+                    pred, conf,
+                    ollama_model=ollama_model,
+                    ollama_url=ollama_url,
+                )
 
             if llm_result.startswith("ERROR:"):
                 error_msg = llm_result.replace("ERROR:", "").strip()
                 st.markdown(f"""
                 <div class="llm-card">
-                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Grok ({grok_model})</div>
+                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Ollama ({ollama_model})</div>
                     <div class="llm-error">⚠️ {error_msg}</div>
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                lines_html = "".join(
-                    f'<div class="llm-line">{line}</div>'
-                    for line in llm_result.split("\n")
-                    if line.strip()
-                )
+                lines = [l.strip() for l in llm_result.split("\n") if l.strip()]
+                lines_html = "".join(f'<div class="llm-line">{line}</div>' for line in lines)
                 st.markdown(f"""
                 <div class="llm-card">
-                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Grok ({grok_model})</div>
+                    <div class="llm-card-title">🤖 شرح النموذج اللغوي — Ollama ({ollama_model})</div>
                     {lines_html}
                 </div>
                 """, unsafe_allow_html=True)
 
-        # ── Grad-CAM Visualisation ──
+        # Grad-CAM
         st.markdown('<br>', unsafe_allow_html=True)
         st.markdown("""
         <div style="font-size:0.72rem; letter-spacing:0.18em; text-transform:uppercase;
@@ -865,16 +731,16 @@ with right_col:
             st.image(overlay, width=200, channels="BGR")
             st.markdown('<div class="img-card-label">الصورة المدمجة</div></div>', unsafe_allow_html=True)
 
-        # ── All Class Probabilities ──
+        # All Probabilities
         with st.expander("📊 جميع الاحتمالات"):
             for i in np.argsort(all_preds)[::-1]:
-                pct       = float(all_preds[i]) * 100
-                bar_color = color if CLASS_NAMES[i] == pred else "#bbf7d0"
+                pct = float(all_preds[i]) * 100
+                bar_color = color if class_names[i] == pred else "#bbf7d0"
                 st.markdown(f"""
                 <div style="display:flex; align-items:center; gap:0.75rem;
                              margin-bottom:0.5rem; font-size:0.82rem;">
                     <div style="width:160px; color:#4b7a5e; white-space:nowrap;
-                                overflow:hidden; text-overflow:ellipsis;">{CLASS_NAMES[i]}</div>
+                                overflow:hidden; text-overflow:ellipsis;">{class_names[i]}</div>
                     <div style="flex:1; background:#dcfce7; border-radius:999px; height:6px; overflow:hidden;">
                         <div style="width:{pct:.1f}%; height:100%;
                                     background:{bar_color}; border-radius:999px;"></div>
@@ -894,9 +760,8 @@ with right_col:
         </div>
         """, unsafe_allow_html=True)
 
-
 # ==============================
-# Medical Disclaimer
+# Disclaimer
 # ==============================
 st.markdown("""
 <div class="disclaimer">
