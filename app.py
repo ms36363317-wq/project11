@@ -239,7 +239,7 @@ def load_vision_model():
 
 @st.cache_resource
 def load_llm():
-    model_name = "microsoft/Phi-3-mini-4k-instruct"
+    model_name = "grok-3-betagrok-3grok-3-latest"
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         llm = AutoModelForCausalLM.from_pretrained(
