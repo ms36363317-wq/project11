@@ -472,16 +472,46 @@ def grok_llm_explain(
 
 
 # ==============================
+# Legacy Keras 2 → Keras 3 Compatibility Patch
+# ==============================
+def _patch_input_layer():
+    """
+    Keras 3 / TF 2.16+ removed 'batch_shape' from InputLayer.__init__.
+    Models saved with Keras 2 still store it in their JSON config, so
+    deserialization crashes with:
+        Unrecognized keyword arguments: ['batch_shape']
+
+    This monkey-patch wraps InputLayer so that 'batch_shape' is silently
+    converted to 'shape' (dropping the leading None batch dimension)
+    before the real constructor runs.
+    """
+    try:
+        original_init = tf.keras.layers.InputLayer.__init__
+
+        def _patched_init(self, *args, **kwargs):
+            if "batch_shape" in kwargs:
+                batch_shape = kwargs.pop("batch_shape")
+                # batch_shape is (None, H, W, C) — strip the leading None
+                if batch_shape and batch_shape[0] is None:
+                    kwargs.setdefault("shape", tuple(batch_shape[1:]))
+                else:
+                    kwargs.setdefault("shape", tuple(batch_shape))
+            original_init(self, *args, **kwargs)
+
+        tf.keras.layers.InputLayer.__init__ = _patched_init
+    except Exception:
+        pass  # If patching fails, proceed anyway and let the load error surface normally
+
+
+_patch_input_layer()
+
+
+# ==============================
 # Vision Model — Load & Cache
 # ==============================
 @st.cache_resource
 def load_model_cached():
-    """Download (if needed) and load the EfficientNetB3 model.
-
-    Uses compile=False to avoid the 'batch_shape' keyword argument error
-    that occurs when a model saved with an older Keras version is loaded
-    under Keras 3 / TF 2.16+.
-    """
+    """Download (if needed) and load the EfficientNetB3 model."""
     if not os.path.exists(MODEL_PATH):
         with st.spinner("⬇️ جاري تحميل النموذج..."):
             gdown.download(
@@ -499,9 +529,6 @@ def load_model_cached():
         st.stop()
 
     try:
-        # compile=False skips optimizer/loss deserialization and avoids
-        # the 'Unrecognized keyword arguments: [batch_shape]' error that
-        # appears when loading legacy Keras 2 .h5 files in TF 2.16+.
         return load_model(MODEL_PATH, compile=False)
     except Exception as exc:
         st.error(f"❌ فشل تحميل النموذج: {exc}")
