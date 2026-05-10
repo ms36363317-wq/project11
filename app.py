@@ -275,7 +275,7 @@ def gradcam(img, model):
         conv_outputs, predictions = grad_model(arr)
 
         # تحويل الـ tensor إلى integer
-        class_idx = int(tf.argmax(predictions[0]))
+        class_idx = tf.argmax(predictions[0]).numpy()
 
         loss = predictions[:, class_idx]
 
