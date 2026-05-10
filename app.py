@@ -509,6 +509,13 @@ _patch_input_layer()
 # ==============================
 # Vision Model — Load & Cache
 # ==============================
+def _patched_init(self, *args, **kwargs):
+    if "batch_shape" in kwargs:
+        batch_shape = kwargs.pop("batch_shape")   # remove the old arg
+        kwargs.setdefault("shape", tuple(batch_shape[1:]))  # e.g. (300,300,3)
+    original_init(self, *args, **kwargs)
+
+tf.keras.layers.InputLayer.__init__ = _patched_init
 @st.cache_resource
 def load_model_cached():
     """Download (if needed) and load the EfficientNetB3 model."""
