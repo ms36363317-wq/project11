@@ -251,47 +251,56 @@ def predict(img, model):
 
 def gradcam(img, model):
 
-    arr = np.array(img.resize((300, 300)))
+    img_array = np.array(img.resize((300, 300)))
 
-    arr = tf.keras.applications.efficientnet.preprocess_input(arr)
+    img_array = tf.keras.applications.efficientnet.preprocess_input(img_array)
 
-    arr = np.expand_dims(arr, axis=0)
+    img_array = np.expand_dims(img_array, axis=0)
 
     # آخر Conv Layer
-    target_layer = None
+    last_conv_layer = None
 
     for layer in reversed(model.layers):
         if isinstance(layer, tf.keras.layers.Conv2D):
-            target_layer = layer
+            last_conv_layer = layer
             break
 
+    # Model for GradCAM
     grad_model = tf.keras.models.Model(
         inputs=model.inputs,
-        outputs=[target_layer.output, model.output]
+        outputs=[last_conv_layer.output, model.output]
     )
 
     with tf.GradientTape() as tape:
 
-        conv_outputs, predictions = grad_model(arr)
+        conv_outputs, predictions = grad_model(img_array)
 
-        # تحويل الـ tensor إلى integer
-        class_idx = tf.argmax(predictions[0]).numpy()
+        # لو predictions list
+        if isinstance(predictions, list):
+            predictions = predictions[0]
+
+        # تحويل إلى numpy
+        preds = predictions.numpy()
+
+        class_idx = np.argmax(preds[0])
 
         loss = predictions[:, class_idx]
 
+    # gradients
     grads = tape.gradient(loss, conv_outputs)
 
     pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
 
     conv_outputs = conv_outputs[0]
 
-    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
-
-    heatmap = tf.squeeze(heatmap)
+    heatmap = tf.reduce_sum(
+        pooled_grads * conv_outputs,
+        axis=-1
+    )
 
     heatmap = np.maximum(heatmap, 0)
 
-    heatmap /= tf.reduce_max(heatmap) + 1e-8
+    heatmap = heatmap / (np.max(heatmap) + 1e-8)
 
     heatmap = heatmap.numpy()
 
@@ -299,7 +308,10 @@ def gradcam(img, model):
 
     heatmap = np.uint8(255 * heatmap)
 
-    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    heatmap = cv2.applyColorMap(
+        heatmap,
+        cv2.COLORMAP_JET
+    )
 
     return heatmap
 
